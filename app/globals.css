@@ -1,26 +1,105 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --color-base: var(--bg-base);
+  --color-panel: var(--bg-panel);
+  --color-input: var(--bg-input);
+  --color-subtle: var(--border-subtle);
+  --color-txt: var(--text-main);
+  --color-muted: var(--text-muted);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* Warm, Soft, Eye-Care Light Mode (Paper Vibe) */
+    --bg-base: #f4f3ef; /* Warm, dull off-white (Removes glare) */
+    --bg-panel: #fbfaf8; /* Soft paper white, deliberately avoiding #ffffff */
+    --bg-input: #ebe9e4; /* Slightly darker, warm input background */
+    --border-subtle: rgba(40, 35, 30, 0.08); /* Warm-tinted subtle borders */
+    --text-main: #2c2a28; /* Deep warm gray instead of harsh jet black */
+    --text-muted: #7a7571; /* Soft earthy muted gray */
+  }
+
+  .dark {
+    /* The Beloved Vercel-Style Deep Dark Mode */
+    --bg-base: #0a0a0a;
+    --bg-panel: #111111;
+    --bg-input: #161616;
+    --border-subtle: rgba(255, 255, 255, 0.1);
+    --text-main: #ededed;
+    --text-muted: #888888;
+  }
+
+  body {
+    background-color: var(--color-base);
+    color: var(--color-txt);
+    /* Updated selection color to look good on both themes */
+    @apply antialiased selection:bg-black/10 dark:selection:bg-white/20 selection:text-txt;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Minimalist Scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-subtle) transparent;
+}
+*::-webkit-scrollbar {
+  width: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--color-subtle);
+  border-radius: 10px;
+}
+
+/* VIEW TRANSITION API REVEAL EFFECT */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+button {
+  cursor: pointer;
+}
+
+
+.cl-rootBox {
+  padding: 0;
+}
+
+.cl-cardBox {
+  padding: 0;
+  border: none;
+  box-shadow: none;
+}
+.cl-card {
+  background: none;
+  padding: 0;
+}
+.cl-header {
+  display: hidden;
+}
+
+.cl-internal-1f4p2mz {
+  display: none;
+}
+
+.cl-footer {
+  display: none;
+}
+
+.cl-internal-11tkpc3 {
+  padding: 8px;
+}
+
+.cl-internal-wcdzh5 {
+  width: 70%;
+  margin: 1px auto;
+}
+
+.cl-internal-wcdzh5[data-variant="outline"] {
+  box-shadow: 0px 0px 0px;
 }
