@@ -1,7 +1,5 @@
 "use client";
 
-import React from "react";
-import Navbar from "@/components/Navbar";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { BookOpen, FileText, Link2, ArrowRight, Sparkles, Database, FileSearch } from "lucide-react";
@@ -24,7 +22,6 @@ export default function Home() {
 
   return (
     <div className="flex h-[100dvh] w-full flex-col bg-base overflow-hidden selection:bg-orange-500/20">
-      <Navbar />
 
       <main className="relative flex flex-1 flex-col overflow-y-auto custom-thin-scrollbar">
         {/* Modern Grid Background & Glowing Orbs - Orange/Amber theme for 'Chai' */}
