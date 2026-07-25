@@ -2,6 +2,9 @@ import { inngest } from "./client";
 import dbConnect from "@/lib/dbConnect";
 import Source from "@/models/source.model";
 import { WebPDFLoader } from "@langchain/community/document_loaders/web/pdf";
+import { YoutubeLoader } from "@langchain/community/document_loaders/web/youtube";
+import { YoutubeTranscript } from "youtube-transcript";
+import { CheerioWebBaseLoader } from "@langchain/community/document_loaders/web/cheerio";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { QdrantVectorStore } from "@langchain/qdrant";
@@ -36,32 +39,61 @@ export const processSourceDocument = inngest.createFunction(
 
     console.log("check source: PROCESSING⏳");
 
-    // Phase 2: LangChain Extraction (PDF Se Text Nikalna)
+    // Phase 2: LangChain Dynamic Extraction based on TYPE
     const rawText = await step.run("extract-text", async () => {
       console.log(`🚀 Extracting text from ${type} URL: ${fileUrl}`);
 
       let extractedText = "";
 
-      if (type === "PDF") {
-        try {
-          // 1. Supabase se PDF fetch karo
+      try {
+        if (type === "YOUTUBE") {
+          try {
+            console.log("Fetching transcript for:", fileUrl);
+            // Direct API call to fetch transcript blocks
+            const transcript = await YoutubeTranscript.fetchTranscript(fileUrl);
+            // Sab text chunks ko ek single string me jod do
+            extractedText = transcript.map((item) => item.text).join(" ");
+
+            console.log(
+              `✅ Extracted YouTube Transcript: ${extractedText.length} characters.`,
+            );
+          } catch (ytError: any) {
+            console.error("🔥 YouTube Transcript Error:", ytError.message);
+            throw new Error(
+              "Could not fetch YouTube transcript. Is the video private or missing CC/Subtitles?",
+            );
+          }
+        } else if (type === "URL") {
+          // 🌐 Website Web Scraper (Cheerio)
+          const loader = new CheerioWebBaseLoader(fileUrl);
+          const docs = await loader.load();
+          extractedText = docs.map((doc) => doc.pageContent).join("\n");
+          console.log(`✅ Scraped Website content.`);
+        } else if (type === "PDF") {
+          // 📄 PDF Extractor
           const response = await fetch(fileUrl);
           const blob = await response.blob();
-
-          // 2. LangChain Loader me daalo
           const loader = new WebPDFLoader(blob);
           const docs = await loader.load();
-
-          // 3. Har page ka text jod lo
           extractedText = docs.map((doc) => doc.pageContent).join("\n");
-          console.log(`✅ Extracted ${docs.length} pages of text.`);
-        } catch (error) {
-          console.error("PDF Extraction Failed:", error);
-          throw new Error("Failed to extract PDF text"); // Inngest automatically retry karega
+          console.log(`✅ Extracted ${docs.length} pages of PDF text.`);
+        } else if (type === "TEXT" || type === "TRANSCRIPT") {
+          // 📝 TXT, Markdown, CSV, Raw Text (from Supabase)
+          const response = await fetch(fileUrl);
+          extractedText = await response.text();
+          console.log(
+            `✅ Extracted ${extractedText.length} characters of Raw Text.`,
+          );
+        } else {
+          throw new Error("Unsupported format type");
         }
-      } else {
-        // Baad me yahan YOUTUBE aur TEXT/URL ka logic aayega
-        extractedText = "Placeholder for non-PDF files";
+
+        if (!extractedText || extractedText.trim().length === 0) {
+          throw new Error("Extracted text is empty or blocked by the website");
+        }
+      } catch (error) {
+        console.error(`🔥 ${type} Extraction Failed:`, error);
+        throw new Error(`Failed to extract data from ${type}`);
       }
 
       return extractedText;

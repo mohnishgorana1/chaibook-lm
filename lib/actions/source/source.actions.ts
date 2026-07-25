@@ -58,7 +58,7 @@ export async function deleteSourceAction(sourceId: string, notebookId: string) {
     // ==========================================
     // STEP 1: SUPABASE STORAGE DELETE
     // ==========================================
-    if (source.type === "PDF" && source.sourceUrl) {
+    if (source.sourceUrl && source.sourceUrl.includes("supabase.co")) {
       try {
         const urlObj = new URL(source.sourceUrl);
         const pathSegments = urlObj.pathname.split("/");
@@ -116,7 +116,9 @@ export async function deleteSourceAction(sourceId: string, notebookId: string) {
             wait: true,
             points: pointIds,
           });
-          console.log(`🗑️ Deleted ${pointIds.length} vector embeddings from Qdrant`);
+          console.log(
+            `🗑️ Deleted ${pointIds.length} vector embeddings from Qdrant`,
+          );
         }
       } catch (qdrantError: any) {
         console.error("❌ Qdrant deletion error:", qdrantError.message);

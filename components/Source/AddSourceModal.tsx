@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Plus, X, UploadCloud, Link2, Loader2 } from "lucide-react";
+import { Plus, X, UploadCloud, Link2, Loader2, Type } from "lucide-react";
 import { FaYoutube } from 'react-icons/fa'
 import { supabase } from "@/lib/supabase/client";
 import { createSourceAction } from "@/lib/actions/source/source.actions";
@@ -10,8 +10,9 @@ import { createSourceAction } from "@/lib/actions/source/source.actions";
 export default function AddSourceModal({ notebookId }: { notebookId: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [activeTab, setActiveTab] = useState<"file" | "link">("file");
+  const [activeTab, setActiveTab] = useState<"file" | "link" | "text">("file");
   const [urlInput, setUrlInput] = useState("");
+  const [rawTextInput, setRawTextInput] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -34,62 +35,54 @@ export default function AddSourceModal({ notebookId }: { notebookId: string }) {
       let sourceType: "PDF" | "TEXT" | "URL" | "YOUTUBE" | "TRANSCRIPT" = "URL";
       let sourceTitle = "";
 
-      console.log("Active tab", activeTab)
-
       if (activeTab === "link") {
         // --- 1. LINK LOGIC ---
         if (!urlInput.trim()) return;
         finalSourceUrl = urlInput;
-        sourceTitle = urlInput; // Future update: Isko YouTube API se fetch karke real title de sakte hain
+        sourceTitle = urlInput;
         sourceType = urlInput.includes("youtube.com") || urlInput.includes("youtu.be") ? "YOUTUBE" : "URL";
-        console.log("LINK ", finalSourceUrl, sourceTitle, sourceType)
-      } else {
-        // --- 2. FILE UPLOAD LOGIC ---
+      }
+      else if (activeTab === "text") {
+        // --- 2. RAW TEXT LOGIC (Smart Conversion to File) ---
+        if (!rawTextInput.trim()) return;
+        sourceType = "TEXT";
+        // Title me shuru ke kuch words daal dete hain
+        sourceTitle = `Text: ${rawTextInput.substring(0, 20)}...`;
+
+        // Raw text ko ek TXT File/Blob me convert kar diya
+        const textFile = new File([rawTextInput], `pasted-text-${Date.now()}.txt`, { type: "text/plain" });
+
+        const { data, error } = await supabase.storage
+          .from('chaibook-sources')
+          .upload(textFile.name, textFile);
+
+        if (error) throw error;
+
+        const { data: publicUrlData } = supabase.storage.from('chaibook-sources').getPublicUrl(textFile.name);
+        finalSourceUrl = publicUrlData.publicUrl;
+      }
+      else {
+        // --- 3. FILE UPLOAD LOGIC ---
         if (!file) return;
 
         const fileExt = file.name.split('.').pop()?.toLowerCase();
         if (fileExt === 'pdf') sourceType = "PDF";
-        else if (fileExt === 'txt') sourceType = "TEXT";
+        else if (fileExt === 'txt' || fileExt === 'csv' || fileExt === 'md') sourceType = "TEXT";
         else if (fileExt === 'vtt' || fileExt === 'srt') sourceType = "TRANSCRIPT";
         else throw new Error("Unsupported file format");
 
-        console.log("FILE: ", sourceType, fileExt);
-
         sourceTitle = file.name;
-
-
-        // Generate a unique clean filename
         const cleanFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '');
         const fileName = `${Date.now()}-${cleanFileName}`;
 
-        console.log("filename", fileName);
+        const { data, error } = await supabase.storage.from('chaibook-sources').upload(fileName, file);
+        if (error) throw error;
 
-        
-
-        // Upload to Supabase bucket
-        const { data, error } = await supabase.storage
-          .from('chaibook-sources')
-          .upload(fileName, file);
-
-
-        if (error) {
-          console.log("error spbse", error)
-          throw error
-        };
-
-        // Get the public URL directly from Supabase
-        const { data: publicUrlData } = supabase.storage
-          .from('chaibook-sources')
-          .getPublicUrl(fileName);
-
+        const { data: publicUrlData } = supabase.storage.from('chaibook-sources').getPublicUrl(fileName);
         finalSourceUrl = publicUrlData.publicUrl;
-
-        console.log("finalSourceUrl", finalSourceUrl);
       }
 
-
-
-      // --- 3. CREATE MONGODB DOCUMENT ---
+      // --- 4. CREATE MONGODB DOCUMENT ---
       await createSourceAction({
         notebookId,
         title: sourceTitle,
@@ -97,9 +90,10 @@ export default function AddSourceModal({ notebookId }: { notebookId: string }) {
         sourceUrl: finalSourceUrl
       });
 
-      // --- 4. CLEANUP & CLOSE ---
+      // --- 5. CLEANUP & CLOSE ---
       setIsOpen(false);
       setUrlInput("");
+      setRawTextInput("");
       setFile(null);
     } catch (error) {
       console.error("Upload error:", error);
@@ -109,7 +103,6 @@ export default function AddSourceModal({ notebookId }: { notebookId: string }) {
     }
   };
 
-  
   const modalContent = isOpen ? (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm transition-all">
       <div className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-subtle bg-panel shadow-2xl animate-in fade-in zoom-in duration-200">
@@ -122,98 +115,88 @@ export default function AddSourceModal({ notebookId }: { notebookId: string }) {
             </div>
             <h2 className="text-lg font-bold text-txt">Add New Source</h2>
           </div>
-          <button onClick={() => setIsOpen(false)} className="rounded-xl p-2 text-muted transition-colors hover:bg-subtle hover:text-txt">
+          <button onClick={() => setIsOpen(false)} className="rounded-xl p-2 text-muted hover:bg-subtle hover:text-txt">
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Tab Switcher */}
         <div className="flex w-full border-b border-subtle bg-base/50">
-          <button
-            onClick={() => setActiveTab("file")}
-            className={`flex flex-1 items-center justify-center gap-2 py-3 text-sm font-semibold transition-colors ${activeTab === "file" ? "border-b-2 border-orange-500 text-orange-500" : "text-muted hover:text-txt"
-              }`}
-          >
-            <UploadCloud className="h-4 w-4" />
-            Upload File
+          <button onClick={() => setActiveTab("file")} className={`flex flex-1 items-center justify-center gap-2 py-3 text-sm font-semibold transition-colors ${activeTab === "file" ? "border-b-2 border-orange-500 text-orange-500" : "text-muted hover:text-txt"}`}>
+            <UploadCloud className="h-4 w-4" /> File
           </button>
-          <button
-            onClick={() => setActiveTab("link")}
-            className={`flex flex-1 items-center justify-center gap-2 py-3 text-sm font-semibold transition-colors ${activeTab === "link" ? "border-b-2 border-orange-500 text-orange-500" : "text-muted hover:text-txt"
-              }`}
-          >
-            <Link2 className="h-4 w-4" />
-            Paste Link
+          <button onClick={() => setActiveTab("link")} className={`flex flex-1 items-center justify-center gap-2 py-3 text-sm font-semibold transition-colors ${activeTab === "link" ? "border-b-2 border-orange-500 text-orange-500" : "text-muted hover:text-txt"}`}>
+            <Link2 className="h-4 w-4" /> Link
+          </button>
+          <button onClick={() => setActiveTab("text")} className={`flex flex-1 items-center justify-center gap-2 py-3 text-sm font-semibold transition-colors ${activeTab === "text" ? "border-b-2 border-orange-500 text-orange-500" : "text-muted hover:text-txt"}`}>
+            <Type className="h-4 w-4" /> Raw Text
           </button>
         </div>
 
         <form onSubmit={handleSubmit}>
           <div className="p-6">
 
-            {/* FILE UPLOAD TAB */}
+            {/* FILE TAB */}
             {activeTab === "file" && (
               <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-subtle bg-base p-8 text-center transition-colors hover:border-orange-500/50 hover:bg-orange-500/5">
-                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-orange-500/10 text-orange-500">
-                  <UploadCloud className="h-7 w-7" />
-                </div>
-                <h3 className="mb-1 text-sm font-bold text-txt">
-                  {file ? file.name : "Click to upload or drag and drop"}
-                </h3>
-                <p className="mb-4 text-xs font-medium text-muted">Supports PDF, TXT, VTT, SRT</p>
-                <input type="file" className="hidden" id="file-upload" accept=".pdf,.txt,.vtt,.srt" onChange={handleFileChange} />
-                <label
-                  htmlFor="file-upload"
-                  className="cursor-pointer rounded-lg bg-panel px-4 py-2 text-sm font-semibold text-txt border border-subtle hover:bg-subtle transition-colors"
-                >
+                <UploadCloud className="mb-4 h-10 w-10 text-orange-500/50" />
+                <h3 className="mb-1 text-sm font-bold text-txt">{file ? file.name : "Click to upload file"}</h3>
+                <p className="mb-4 text-xs font-medium text-muted">PDF, TXT, CSV, MD, VTT, SRT</p>
+                <input type="file" className="hidden" id="file-upload" accept=".pdf,.txt,.csv,.md,.vtt,.srt" onChange={handleFileChange} />
+                <label htmlFor="file-upload" className="cursor-pointer rounded-lg bg-panel px-4 py-2 text-sm font-semibold text-txt border border-subtle hover:bg-subtle transition-colors">
                   {file ? "Change File" : "Select File"}
                 </label>
               </div>
             )}
 
-            {/* PASTE LINK TAB */}
+            {/* LINK TAB */}
             {activeTab === "link" && (
               <div className="flex flex-col gap-4">
                 <div className="flex gap-4">
                   <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-subtle bg-base p-4 text-center">
                     <FaYoutube className="mb-2 h-6 w-6 text-red-500" />
-                    <span className="text-xs font-semibold text-muted">YouTube Video</span>
+                    <span className="text-[11px] font-semibold text-muted">YouTube</span>
                   </div>
                   <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-subtle bg-base p-4 text-center">
                     <Link2 className="mb-2 h-6 w-6 text-blue-500" />
-                    <span className="text-xs font-semibold text-muted">Website URL</span>
+                    <span className="text-[11px] font-semibold text-muted">Website</span>
                   </div>
                 </div>
+                <input
+                  type="url"
+                  placeholder="https://youtube.com/watch?v=... or https://example.com"
+                  value={urlInput}
+                  onChange={(e) => setUrlInput(e.target.value)}
+                  className="w-full rounded-xl border border-subtle bg-base px-4 py-3 text-[15px] text-txt placeholder:text-muted/50 focus:border-orange-500 focus:outline-none"
+                />
+              </div>
+            )}
 
-                <div className="flex flex-col gap-2">
-                  <label htmlFor="url" className="text-sm font-semibold text-txt">Enter URL</label>
-                  <input
-                    type="url"
-                    id="url"
-                    placeholder="https://youtube.com/watch?v=..."
-                    value={urlInput}
-                    onChange={(e) => setUrlInput(e.target.value)}
-                    className="w-full rounded-xl border border-subtle bg-base px-4 py-3 text-[15px] text-txt placeholder:text-muted/50 focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500 transition-all"
-                  />
-                </div>
+            {/* TEXT TAB */}
+            {activeTab === "text" && (
+              <div className="flex flex-col gap-2">
+                <textarea
+                  placeholder="Paste your article, code, or notes here..."
+                  value={rawTextInput}
+                  onChange={(e) => setRawTextInput(e.target.value)}
+                  rows={6}
+                  className="w-full rounded-xl border border-subtle bg-base p-4 text-[14px] text-txt placeholder:text-muted/50 focus:border-orange-500 focus:outline-none custom-thin-scrollbar resize-none"
+                />
               </div>
             )}
           </div>
 
           {/* Footer */}
           <div className="flex items-center justify-end gap-3 border-t border-subtle bg-base/50 px-6 py-4">
-            <button
-              type="button"
-              onClick={() => setIsOpen(false)}
-              className="rounded-xl px-4 py-2.5 text-sm font-bold text-muted transition-colors hover:bg-subtle hover:text-txt"
-            >
+            <button type="button" onClick={() => setIsOpen(false)} className="rounded-xl px-4 py-2.5 text-sm font-bold text-muted transition-colors hover:bg-subtle hover:text-txt">
               Cancel
             </button>
             <button
               type="submit"
-              disabled={isLoading || (activeTab === "link" && !urlInput.trim()) || (activeTab === "file" && !file)}
-              className="flex min-w-[120px] items-center justify-center rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isLoading || (activeTab === "link" && !urlInput.trim()) || (activeTab === "file" && !file) || (activeTab === "text" && !rawTextInput.trim())}
+              className="flex min-w-[120px] items-center justify-center rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-orange-600 disabled:opacity-50"
             >
-              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : activeTab === "file" ? "Upload & Process" : "Process Link"}
+              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Process Data"}
             </button>
           </div>
         </form>
@@ -224,12 +207,8 @@ export default function AddSourceModal({ notebookId }: { notebookId: string }) {
 
   return (
     <>
-      <button
-        onClick={() => setIsOpen(true)}
-        className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500/10 border border-orange-500/20 px-4 py-2.5 text-sm font-bold text-orange-500 transition-all hover:bg-orange-500 hover:text-white"
-      >
-        <Plus className="h-4 w-4" />
-        Add Source
+      <button onClick={() => setIsOpen(true)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500/10 border border-orange-500/20 px-4 py-2.5 text-sm font-bold text-orange-500 transition-all hover:bg-orange-500 hover:text-white">
+        <Plus className="h-4 w-4" /> Add Source
       </button>
       {mounted && createPortal(modalContent, document.body)}
     </>
