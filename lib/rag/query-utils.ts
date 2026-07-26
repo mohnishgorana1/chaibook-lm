@@ -3,17 +3,12 @@ import { PromptTemplate } from "@langchain/core/prompts";
 import { StringOutputParser } from "@langchain/core/output_parsers";
 import { QUERY_REWRITER_PROMPT } from "./prompts";
 
-
-// Fast & strict model for intermediate RAG steps
 const fastModel = new ChatOpenAI({
   modelName: "gpt-4o-mini",
   temperature: 0, 
 });
 
-
-// ==========================================
-// 1. THE ROUTER (Does this need Vector Search?)
-// ==========================================
+// 1. THE ROUTER
 export async function routeQuery(query: string): Promise<boolean> {
   const routerPrompt = PromptTemplate.fromTemplate(`
     You are an expert intent classifier. 
@@ -32,11 +27,9 @@ export async function routeQuery(query: string): Promise<boolean> {
   return response.trim().toUpperCase().includes("YES");
 }
 
-// ==========================================
 // 2. QUERY REWRITER & STEP-BACK PROMPTING
-// ==========================================
 export async function optimizeQuery(query: string, chatHistory: string = ""): Promise<string> {
-  const rewritePrompt = PromptTemplate.fromTemplate(QUERY_REWRITER_PROMPT); // Jo prompts.ts me banaya tha
+  const rewritePrompt = PromptTemplate.fromTemplate(QUERY_REWRITER_PROMPT); 
   
   const stepBackPrompt = PromptTemplate.fromTemplate(`
     You are an expert in information retrieval.
@@ -47,7 +40,6 @@ export async function optimizeQuery(query: string, chatHistory: string = ""): Pr
     Step-Back Conceptual Query:
   `);
 
-  // Run both rewriting and step-back in parallel for speed
   const [rewrittenQuery, stepBackQuery] = await Promise.all([
     rewritePrompt.pipe(fastModel).pipe(new StringOutputParser()).invoke({ raw_query: query }),
     stepBackPrompt.pipe(fastModel).pipe(new StringOutputParser()).invoke({ query })
@@ -56,13 +48,10 @@ export async function optimizeQuery(query: string, chatHistory: string = ""): Pr
   console.log("🔄 Optimized Query:", rewrittenQuery);
   console.log("🔙 Step-Back Query:", stepBackQuery);
 
-  // Combine both for a massive recall boost in Qdrant
   return `${rewrittenQuery} \n ${stepBackQuery}`;
 }
 
-// ==========================================
 // 3. HyDE (Hypothetical Document Embeddings)
-// ==========================================
 export async function generateHyDE(query: string): Promise<string> {
   const hydePrompt = PromptTemplate.fromTemplate(`
     You are an expert answering questions. 
@@ -78,6 +67,5 @@ export async function generateHyDE(query: string): Promise<string> {
   
   console.log("🧠 HyDE Document Generated:", hypotheticalDocument.substring(0, 50) + "...");
   
-  // Return the original query + hypothetical answer to embed both
   return `${query}\n\n${hypotheticalDocument}`;
 }

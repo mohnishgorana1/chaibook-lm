@@ -2,18 +2,26 @@ import { OpenAIEmbeddings, ChatOpenAI } from "@langchain/openai";
 import { QdrantVectorStore } from "@langchain/qdrant";
 import { PromptTemplate } from "@langchain/core/prompts";
 import { StringOutputParser } from "@langchain/core/output_parsers";
+import dbConnect from "@/lib/dbConnect";
+import Source from "@/models/source.model";
 
-// Evaluator ke liye strict aur fast model
 const evaluatorModel = new ChatOpenAI({
   modelName: "gpt-4o-mini",
   temperature: 0,
 });
 
-// ==========================================
-// 1. QDRANT RETRIEVER (Fetch raw documents)
-// ==========================================
+// 1. QDRANT RETRIEVER (Federated Multi-Retrieval)
 export async function retrieveDocuments(query: string, notebookId: string) {
   console.log("🔍 Searching Qdrant Vector DB for:", query.substring(0, 50) + "...");
+
+  // 🔥 STEP 1: Get all READY sources for this notebook from MongoDB
+  await dbConnect();
+  const sources = await Source.find({ notebookId, status: "READY" });
+
+  if (!sources || sources.length === 0) {
+    console.log("No ready sources found for this notebook.");
+    return [];
+  }
 
   const embeddings = new OpenAIEmbeddings({
     modelName: "text-embedding-3-small",
@@ -25,27 +33,35 @@ export async function retrieveDocuments(query: string, notebookId: string) {
     collectionName: "chaibook_sources",
   });
 
-  // Top 6 chunks nikalenge, sirf is specific notebook ke
-  const retriever = vectorStore.asRetriever({
-    k: 6,
-    filter: {
-      must: [
-        {
-          key: "metadata.notebookId",
-          match: { value: notebookId },
-        },
-      ],
-    },
+  // 🔥 STEP 2: Parallel Search for EVERY SINGLE SOURCE 🔥
+  // Hum har source (PDF, YT, Web) ke andar alag se search karenge
+  // taaki har source ko equal priority mile.
+  const retrievalPromises = sources.map((source) => {
+    const retriever = vectorStore.asRetriever({
+      k: 3, // Har source me se Top 3 best chunks nikalenge
+      filter: {
+        must: [
+          {
+            key: "metadata.sourceId",
+            match: { value: source._id.toString() },
+          },
+        ],
+      },
+    });
+    return retriever.invoke(query);
   });
 
-  const docs = await retriever.invoke(query);
-  console.log(`📥 Retrieved ${docs.length} raw chunks from Qdrant.`);
+  // Wait for all searches to complete parallelly (Super Fast!)
+  const resultsArray = await Promise.all(retrievalPromises);
+  
+  // Combine all chunks into one flat array
+  const docs = resultsArray.flat();
+  
+  console.log(`📥 Retrieved ${docs.length} diverse chunks from ${sources.length} different sources.`);
   return docs;
 }
 
-// ==========================================
-// 2. CRAG EVALUATOR (Corrective RAG Filter)
-// ==========================================
+// 2. CRAG EVALUATOR
 export async function evaluateDocumentsWithCRAG(question: string, documents: any[]) {
   console.log("⚖️ Running CRAG Evaluator to filter out irrelevant chunks...");
 
@@ -62,7 +78,6 @@ export async function evaluateDocumentsWithCRAG(question: string, documents: any
 
   const chain = prompt.pipe(evaluatorModel).pipe(new StringOutputParser());
 
-  // Promise.all use kar rahe hain taaki saare chunks parallel me check ho jaye (Fast Speed!)
   const evaluationPromises = documents.map(async (doc) => {
     try {
       const grade = await chain.invoke({ question, document: doc.pageContent });
@@ -70,13 +85,12 @@ export async function evaluateDocumentsWithCRAG(question: string, documents: any
       return { doc, isRelevant };
     } catch (error) {
       console.error("CRAG Evaluation Error for a chunk:", error);
-      return { doc, isRelevant: false }; // Agar error aaya toh safe side pe discard kar do
+      return { doc, isRelevant: false }; 
     }
   });
 
   const results = await Promise.all(evaluationPromises);
   
-  // Sirf 'yes' wale chunks ko aage bhejenge
   const relevantDocs = results.filter((r) => r.isRelevant).map((r) => r.doc);
 
   console.log(`✅ CRAG Filtered: Kept ${relevantDocs.length} out of ${documents.length} chunks.`);

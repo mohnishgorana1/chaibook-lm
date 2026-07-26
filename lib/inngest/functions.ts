@@ -8,167 +8,116 @@ import { CheerioWebBaseLoader } from "@langchain/community/document_loaders/web/
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { QdrantVectorStore } from "@langchain/qdrant";
+import { Document } from "@langchain/core/documents";
 
 export const processSourceDocument = inngest.createFunction(
   {
     id: "process-source-document",
     triggers: [{ event: "source/process.started" }],
   },
-
   async ({ event, step }) => {
     console.log("Inngest started");
     const { sourceId, fileUrl, type, notebookId } = event.data;
 
-    console.log(
-      "event data: ",
-      "\nsourceID: ",
-      sourceId,
-      "\nfileurl: ",
-      fileUrl,
-      "\ntype: ",
-      type,
-      "\nnotebookId: ",
-      notebookId,
-    );
-
-    // Phase 1: Status ko "PROCESSING" kardo taaki UI me ghoomega
+    // Phase 1: Update Status
     await step.run("update-status-processing", async () => {
       await dbConnect();
       await Source.findByIdAndUpdate(sourceId, { status: "PROCESSING" });
     });
 
-    console.log("check source: PROCESSING⏳");
+    // Fetch original source title for metadata
+    const sourceTitle = await step.run("get-source-title", async () => {
+      await dbConnect();
+      const src = await Source.findById(sourceId);
+      return src ? src.title : "Unknown Source";
+    });
 
-    // Phase 2: LangChain Dynamic Extraction based on TYPE
-    const rawText = await step.run("extract-text", async () => {
+    // Phase 2: Dynamic Extraction WITH METADATA PRESERVATION
+    const rawDocs = await step.run("extract-docs", async () => {
       console.log(`🚀 Extracting text from ${type} URL: ${fileUrl}`);
-
-      let extractedText = "";
+      let docs: any[] = [];
 
       try {
         if (type === "YOUTUBE") {
-          try {
-            console.log("Fetching transcript for:", fileUrl);
-            // Direct API call to fetch transcript blocks
-            const transcript = await YoutubeTranscript.fetchTranscript(fileUrl);
-            // Sab text chunks ko ek single string me jod do
-            extractedText = transcript.map((item) => item.text).join(" ");
-
-            console.log(
-              `✅ Extracted YouTube Transcript: ${extractedText.length} characters.`,
-            );
-          } catch (ytError: any) {
-            console.error("🔥 YouTube Transcript Error:", ytError.message);
-            throw new Error(
-              "Could not fetch YouTube transcript. Is the video private or missing CC/Subtitles?",
-            );
-          }
+          const transcript = await YoutubeTranscript.fetchTranscript(fileUrl);
+          // Har line ke sath timestamp save kar rahe hain (in seconds)
+          docs = transcript.map((t) => ({
+            pageContent: t.text,
+            metadata: { timestamp: Math.floor(t.offset / 1000) },
+          }));
         } else if (type === "URL") {
-          // 🌐 Website Web Scraper (Cheerio)
           const loader = new CheerioWebBaseLoader(fileUrl);
-          const docs = await loader.load();
-          extractedText = docs.map((doc) => doc.pageContent).join("\n");
-          console.log(`✅ Scraped Website content.`);
+          const loadedDocs = await loader.load();
+          docs = loadedDocs.map(d => ({ pageContent: d.pageContent, metadata: {} }));
         } else if (type === "PDF") {
-          // 📄 PDF Extractor
           const response = await fetch(fileUrl);
           const blob = await response.blob();
           const loader = new WebPDFLoader(blob);
-          const docs = await loader.load();
-          extractedText = docs.map((doc) => doc.pageContent).join("\n");
-          console.log(`✅ Extracted ${docs.length} pages of PDF text.`);
+          const loadedDocs = await loader.load();
+          // WebPDFLoader already provides loc.pageNumber in metadata
+          docs = loadedDocs.map(d => ({ pageContent: d.pageContent, metadata: d.metadata }));
         } else if (type === "TEXT" || type === "TRANSCRIPT") {
-          // 📝 TXT, Markdown, CSV, Raw Text (from Supabase)
           const response = await fetch(fileUrl);
-          extractedText = await response.text();
-          console.log(
-            `✅ Extracted ${extractedText.length} characters of Raw Text.`,
-          );
+          const text = await response.text();
+          docs = [{ pageContent: text, metadata: {} }];
         } else {
           throw new Error("Unsupported format type");
         }
 
-        if (!extractedText || extractedText.trim().length === 0) {
-          throw new Error("Extracted text is empty or blocked by the website");
-        }
+        if (!docs || docs.length === 0) throw new Error("Extracted text is empty");
+        return docs;
       } catch (error) {
         console.error(`🔥 ${type} Extraction Failed:`, error);
         throw new Error(`Failed to extract data from ${type}`);
       }
-
-      return extractedText;
     });
 
-    // Phase 3: Text Chunking (Bade text ko chhote tukdo me todna)
+    // Phase 3: Text Chunking
     const chunks = await step.run("chunk-text", async () => {
-      console.log(`🧠 Raw text length: ${rawText.length} characters`);
-
-      // 1. Text Splitter setup karo (1000 chars ka ek chunk, 200 chars ka overlap)
       const splitter = new RecursiveCharacterTextSplitter({
         chunkSize: 1000,
         chunkOverlap: 200,
       });
 
-      // 2. Raw text ko chunks me tod do aur Metadata (sourceId) add kar do
-      const documentChunks = await splitter.createDocuments(
-        [rawText],
-        [{ sourceId, notebookId }], // Yeh metadata har chunk ke sath attach ho jayega
-      );
-
-      console.log(
-        `🔪 Successfully chopped text into ${documentChunks.length} chunks!`,
-      );
-
-      // Data ko serialize karke return kar rahe hain taaki next step me use ho sake
-      return JSON.parse(JSON.stringify(documentChunks));
+      // Split while preserving metadata
+      const documentObjects = rawDocs.map(d => new Document({ pageContent: d.pageContent, metadata: d.metadata }));
+      const splitDocs = await splitter.splitDocuments(documentObjects);
+      return JSON.parse(JSON.stringify(splitDocs));
     });
 
-    // Phase 4: OpenAI Embeddings & Qdrant Vector DB (Upgraded with proper metadata index support)
+    // Phase 4: OpenAI Embeddings & Qdrant Upload
     await step.run("generate-embeddings-and-save", async () => {
-      console.log(
-        `⏳ Ready to convert ${chunks.length} chunks into Vector Embeddings...`,
-      );
+      console.log(`⏳ Converting ${chunks.length} chunks into Vector Embeddings...`);
 
-      const embeddings = new OpenAIEmbeddings({
-        modelName: "text-embedding-3-small",
+      const embeddings = new OpenAIEmbeddings({ modelName: "text-embedding-3-small" });
+
+      // Injecting Global Metadata (Title, Type, URL) into every single chunk!
+      const formattedChunks = chunks.map((chunk: any) => ({
+        pageContent: chunk.pageContent,
+        metadata: {
+          ...chunk.metadata, // Contains pageNumber or timestamp from Phase 2
+          sourceId: sourceId.toString(),
+          notebookId: notebookId.toString(),
+          title: sourceTitle,
+          type: type,
+          sourceUrl: fileUrl,
+        },
+      }));
+
+      await QdrantVectorStore.fromDocuments(formattedChunks, embeddings, {
+        url: process.env.QDRANT_URL,
+        apiKey: process.env.QDRANT_API_KEY,
+        collectionName: "chaibook_sources",
       });
-
-      console.log("💾 Uploading Embeddings to Qdrant Cloud...");
-
-      try {
-        // LangChain ka QdrantVectorStore automatically chunks ke sath metadata attach karta hai.
-        // Hum ensure kar rahe hain ki har chunk ke metadata me 'sourceId' direct top-level par ho.
-        const formattedChunks = chunks.map((chunk) => ({
-          pageContent: chunk.pageContent,
-          metadata: {
-            ...chunk.metadata,
-            sourceId: sourceId.toString(), // Ensuring sourceId is explicitly stored
-            notebookId: notebookId.toString(),
-          },
-        }));
-
-        await QdrantVectorStore.fromDocuments(formattedChunks, embeddings, {
-          url: process.env.QDRANT_URL,
-          apiKey: process.env.QDRANT_API_KEY,
-          collectionName: "chaibook_sources",
-        });
-        console.log(
-          "✅ BINGO! Embeddings successfully saved to Qdrant with proper metadata!",
-        );
-      } catch (error) {
-        console.error("❌ Failed to save to Qdrant:", error);
-        throw new Error("Qdrant Save Failed");
-      }
+      console.log("✅ Embeddings saved to Qdrant WITH ALL METADATA!");
     });
 
-    // Phase 5: Sab hone ke baad status "READY" kardo taaki UI green ho jaye
+    // Phase 5: Status Ready
     await step.run("update-status-ready", async () => {
       await dbConnect();
       await Source.findByIdAndUpdate(sourceId, { status: "READY" });
-      console.log("🟢 UI Status updated to READY!");
     });
 
-    // Worker ko successfully close karo
     return { success: true, sourceId };
-  },
+  }
 );
