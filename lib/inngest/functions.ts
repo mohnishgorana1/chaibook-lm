@@ -25,11 +25,34 @@ export const processSourceDocument = inngest.createFunction(
       await Source.findByIdAndUpdate(sourceId, { status: "PROCESSING" });
     });
 
-    // Fetch original source title for metadata
+    // 🔥 SMART TITLE FETCHER: Agar title URL hai, toh asli Title fetch karo
     const sourceTitle = await step.run("get-source-title", async () => {
       await dbConnect();
       const src = await Source.findById(sourceId);
-      return src ? src.title : "Unknown Source";
+      let title = src ? src.title : "Unknown Source";
+
+      // Check if title is basically the URL
+      if (src && (title === src.sourceUrl || title.startsWith("http"))) {
+        try {
+          const res = await fetch(src.sourceUrl);
+          const html = await res.text();
+          // Extract title tag using Regex
+          const match = html.match(/<title>([^<]*)<\/title>/i);
+          if (match && match[1]) {
+            title = match[1].trim();
+            // Clean up YouTube default suffix
+            if (title.endsWith("- YouTube")) {
+              title = title.replace("- YouTube", "").trim();
+            }
+            // Update the Database with the real name!
+            await Source.findByIdAndUpdate(sourceId, { title });
+            console.log(`✅ Fixed Title from URL to: ${title}`);
+          }
+        } catch (e) {
+          console.error("Could not fetch real title, keeping original.");
+        }
+      }
+      return title;
     });
 
     // Phase 2: Dynamic Extraction WITH METADATA PRESERVATION
@@ -40,12 +63,11 @@ export const processSourceDocument = inngest.createFunction(
       try {
         if (type === "YOUTUBE") {
           const transcript = await YoutubeTranscript.fetchTranscript(fileUrl);
-          // Har line ke sath timestamp save kar rahe hain (in seconds)
           docs = transcript.map((t) => ({
             pageContent: t.text,
             metadata: { timestamp: Math.floor(t.offset / 1000) },
           }));
-        } else if (type === "URL") {
+        } else if (type === "URL" || type === "WEBSITE") {
           const loader = new CheerioWebBaseLoader(fileUrl);
           const loadedDocs = await loader.load();
           docs = loadedDocs.map(d => ({ pageContent: d.pageContent, metadata: {} }));
@@ -54,7 +76,6 @@ export const processSourceDocument = inngest.createFunction(
           const blob = await response.blob();
           const loader = new WebPDFLoader(blob);
           const loadedDocs = await loader.load();
-          // WebPDFLoader already provides loc.pageNumber in metadata
           docs = loadedDocs.map(d => ({ pageContent: d.pageContent, metadata: d.metadata }));
         } else if (type === "TEXT" || type === "TRANSCRIPT") {
           const response = await fetch(fileUrl);
@@ -79,7 +100,6 @@ export const processSourceDocument = inngest.createFunction(
         chunkOverlap: 200,
       });
 
-      // Split while preserving metadata
       const documentObjects = rawDocs.map(d => new Document({ pageContent: d.pageContent, metadata: d.metadata }));
       const splitDocs = await splitter.splitDocuments(documentObjects);
       return JSON.parse(JSON.stringify(splitDocs));
@@ -88,14 +108,12 @@ export const processSourceDocument = inngest.createFunction(
     // Phase 4: OpenAI Embeddings & Qdrant Upload
     await step.run("generate-embeddings-and-save", async () => {
       console.log(`⏳ Converting ${chunks.length} chunks into Vector Embeddings...`);
-
       const embeddings = new OpenAIEmbeddings({ modelName: "text-embedding-3-small" });
 
-      // Injecting Global Metadata (Title, Type, URL) into every single chunk!
       const formattedChunks = chunks.map((chunk: any) => ({
         pageContent: chunk.pageContent,
         metadata: {
-          ...chunk.metadata, // Contains pageNumber or timestamp from Phase 2
+          ...chunk.metadata,
           sourceId: sourceId.toString(),
           notebookId: notebookId.toString(),
           title: sourceTitle,

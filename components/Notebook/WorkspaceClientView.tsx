@@ -7,7 +7,7 @@ import {
   ArrowLeft, FileText, Link2, MessageSquare, Captions,
   FileType, Clock, CheckCircle2, Loader2,
   PanelLeftClose, PanelLeft, PanelRightClose, PanelRight, Menu, X, ExternalLink, Trash2,
-  Sparkles, ArrowUp, Clock4, Globe
+  Sparkles, ArrowUp, Clock4, Globe, Map, PlayCircle, BookOpen
 } from "lucide-react";
 import { FaYoutube } from 'react-icons/fa';
 import AddSourceModal from "@/components/Source/AddSourceModal";
@@ -69,6 +69,8 @@ export default function WorkspaceClientView({ notebook, initialSources }: { note
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  
+  const [isRoadmapMode, setIsRoadmapMode] = useState(false);
 
   const handleChatSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,20 +83,27 @@ export default function WorkspaceClientView({ notebook, initialSources }: { note
     setIsLoading(true);
     setCurrentCitations([]); 
 
+    const apiEndpoint = isRoadmapMode ? "/api/roadmap" : "/api/chat";
+    await fetchAndStream(apiEndpoint, { messages: updatedMessages, notebookId: notebook._id, topic: input });
+  };
+
+  const fetchAndStream = async (endpoint: string, payload: any) => {
     try {
-      const response = await fetch("/api/chat", {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: updatedMessages, notebookId: notebook._id }),
+        body: JSON.stringify(payload),
       });
 
-      if (!response.ok) throw new Error("Failed to fetch response");
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to fetch response");
+      }
 
       const sourcesHeader = response.headers.get("x-sources");
       if (sourcesHeader) {
-        try {
-          setCurrentCitations(JSON.parse(atob(sourcesHeader)));
-        } catch (error) { console.error("Failed to parse citations"); }
+        try { setCurrentCitations(JSON.parse(atob(sourcesHeader))); } 
+        catch (error) { console.error("Failed to parse citations"); }
       }
 
       const reader = response.body?.getReader();
@@ -111,8 +120,9 @@ export default function WorkspaceClientView({ notebook, initialSources }: { note
         aiContent += decoder.decode(value, { stream: true });
         setMessages((prev) => prev.map((msg) => msg.id === aiMessageId ? { ...msg, content: aiContent } : msg));
       }
-    } catch (error) {
-      console.error("Chat Error:", error);
+    } catch (error: any) {
+      console.error("Stream Error:", error);
+      alert(error.message);
     } finally {
       setIsLoading(false);
     }
@@ -126,11 +136,10 @@ export default function WorkspaceClientView({ notebook, initialSources }: { note
     }
   }, [initialSources, router]);
 
-  // SMART UI ACTION: Auto-close left sidebar when opening preview from left panel
   const handleOpenPreview = (source: any) => {
     setActivePreview({ title: source.title, type: source.type, contentUrl: source.sourceUrl, snippet: "Ask questions to see relevant chunks here." });
     setRightOpen(true);
-    setLeftOpen(false); // <--- Added this to auto-close left sidebar
+    setLeftOpen(false); 
   };
 
   const handleDeleteSource = async (e: React.MouseEvent, source: any) => {
@@ -200,14 +209,14 @@ export default function WorkspaceClientView({ notebook, initialSources }: { note
           </div>
           <div className="flex items-center gap-2 text-txt">
             <Sparkles className="h-4 w-4 text-emerald-500" />
-            <span className="text-[13px] font-bold tracking-wide">ChaiBookLM</span>
+            <span className="text-[13px] font-bold tracking-wide">{isRoadmapMode ? "Roadmap Architect" : "ChaiBookLM"}</span>
           </div>
           <button onClick={() => setRightOpen(!rightOpen)} className="hidden rounded-xl p-1.5 text-muted transition-colors hover:bg-subtle hover:text-txt lg:block">
             {rightOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRight className="h-4 w-4" />}
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 sm:px-8 pt-6 pb-40 custom-thin-scrollbar">
+        <div className="flex-1 overflow-y-auto px-4 sm:px-8 pt-6 pb-44 custom-thin-scrollbar">
           {messages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center text-center">
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-panel shadow-sm border border-subtle"><MessageSquare className="h-6 w-6 text-txt/40" /></div>
@@ -224,10 +233,90 @@ export default function WorkspaceClientView({ notebook, initialSources }: { note
                   <div key={m.id} className="flex w-full items-start gap-4 py-2 group">
                     <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/20 shadow-sm"><Sparkles className="h-4 w-4 text-emerald-500" /></div>
                     <div className="flex-1 min-w-0 text-[15px] leading-relaxed text-txt">
-                      <div className="prose prose-sm prose-invert max-w-none text-txt"><ReactMarkdown>{m.content}</ReactMarkdown></div>
                       
-                      {/* RICH CITATIONS BUTTONS */}
-                      {currentCitations.length > 0 && messages[messages.length - 1].id === m.id && (
+                      {/* 🔥 FIXED MARKDOWN RENDERER: Solved Hydration Error & UI Bugs 🔥 */}
+                      <div className="prose prose-sm prose-invert max-w-none text-txt">
+                        <ReactMarkdown
+                          components={{
+                            p: ({ node, ...props }) => <div className="mb-4 leading-relaxed" {...props} />,
+                            
+                            h3: ({ node, ...props }) => (
+                              <div className="mt-8 mb-3 flex items-center gap-3">
+                                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/20 border border-emerald-500/30 shadow-sm">
+                                  <Map className="h-4 w-4 text-emerald-500" />
+                                </div>
+                                <h3 className="text-[14px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest m-0" {...props} />
+                              </div>
+                            ),
+                            a: ({ href, children }) => {
+                              if (href?.startsWith("#cite-")) {
+                                const sourceIndex = parseInt(href.replace("#cite-", "")) - 1;
+                                const cite = currentCitations[sourceIndex];
+                                
+                                if (!cite) return <span className="font-semibold text-emerald-500">{children}</span>;
+
+                                if (isRoadmapMode) {
+                                  return (
+                                    <div className="mt-4 mb-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActivePreview({ title: cite.title || `Source ${sourceIndex + 1}`, type: cite.type, contentUrl: cite.url, snippet: cite.snippet, pageNumber: cite.pageNumber ? Number(cite.pageNumber) : undefined, timestamp: cite.timestamp ? Number(cite.timestamp) : undefined });
+                                          setRightOpen(true);
+                                          setLeftOpen(false); 
+                                        }}
+                                        className="flex w-full max-w-md items-center justify-between gap-4 rounded-xl border border-subtle bg-panel px-4 py-3 text-left transition-all hover:border-emerald-500/40 hover:bg-emerald-500/5 hover:shadow-md active:scale-[0.98] group"
+                                      >
+                                        <div className="flex items-center gap-3 overflow-hidden">
+                                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-base shadow-inner border border-subtle transition-colors">
+                                            {getSourceIcon(cite.type)}
+                                          </div>
+                                          <div className="flex flex-col overflow-hidden">
+                                            <span className="truncate text-[14px] font-bold text-txt transition-colors">
+                                              {cite.title || `Source Document ${sourceIndex + 1}`}
+                                            </span>
+                                            <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted mt-0.5">
+                                              {cite.type === "YOUTUBE" && cite.timestamp !== undefined ? <><Clock4 className="h-3 w-3 text-red-500/80"/> Starts at {formatTimestamp(cite.timestamp)}</> : null}
+                                              {cite.type === "PDF" && cite.pageNumber !== undefined ? <><FileText className="h-3 w-3 text-rose-500/80"/> Reference: Page {cite.pageNumber}</> : null}
+                                              {cite.type === "WEBSITE" || cite.type === "URL" ? <><Globe className="h-3 w-3 text-blue-500/80"/> Read Web Article</> : null}
+                                              {cite.type === "TEXT" || cite.type === "TRANSCRIPT" ? <><Captions className="h-3 w-3 text-emerald-500/80"/> Read Text Snippet</> : null}
+                                            </span>
+                                          </div>
+                                        </div>
+                                        <div className="flex shrink-0 items-center justify-center h-8 w-8 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 transition-all">
+                                          {cite.type === "YOUTUBE" ? <PlayCircle className="h-4 w-4" /> : <BookOpen className="h-4 w-4" />}
+                                        </div>
+                                      </button>
+                                    </div>
+                                  );
+                                }
+
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActivePreview({ title: cite.title || `Source ${sourceIndex + 1}`, type: cite.type, contentUrl: cite.url, snippet: cite.snippet, pageNumber: cite.pageNumber ? Number(cite.pageNumber) : undefined, timestamp: cite.timestamp ? Number(cite.timestamp) : undefined });
+                                      setRightOpen(true);
+                                      setLeftOpen(false); 
+                                    }}
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[12px] font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 transition-all mx-1 shadow-sm active:scale-95"
+                                  >
+                                    {getSourceIcon(cite.type)}
+                                    <span className="max-w-[120px] truncate" title={cite.title}>{cite.title || `Source ${sourceIndex + 1}`}</span>
+                                    {cite.type === "YOUTUBE" && cite.timestamp !== undefined && <span className="ml-1 flex items-center gap-1 rounded bg-base px-1.5 py-0.5 text-[10px]"><Clock4 className="h-2.5 w-2.5"/> {formatTimestamp(cite.timestamp)}</span>}
+                                    {cite.type === "PDF" && cite.pageNumber !== undefined && <span className="ml-1 rounded bg-base px-1.5 py-0.5 text-[10px]">Pg {cite.pageNumber}</span>}
+                                  </button>
+                                );
+                              }
+                              return <a href={href} target="_blank" rel="noreferrer" className="text-blue-500 hover:underline">{children}</a>;
+                            }
+                          }}
+                        >
+                          {m.content}
+                        </ReactMarkdown>
+                      </div>
+                      
+                      {!isRoadmapMode && currentCitations.length > 0 && messages[messages.length - 1].id === m.id && (
                         <div className="mt-5 border-t border-subtle pt-3">
                           <span className="text-[11px] font-bold uppercase tracking-wider text-muted">Grounded In Sources</span>
                           <div className="mt-2 flex flex-wrap gap-2">
@@ -237,7 +326,7 @@ export default function WorkspaceClientView({ notebook, initialSources }: { note
                                 onClick={() => {
                                   setActivePreview({ title: cite.title || `Source ${i + 1}`, type: cite.type, contentUrl: cite.url, snippet: cite.snippet, pageNumber: cite.pageNumber ? Number(cite.pageNumber) : undefined, timestamp: cite.timestamp ? Number(cite.timestamp) : undefined });
                                   setRightOpen(true);
-                                  setLeftOpen(false); // <--- SMART UI ACTION: Auto-close left sidebar on citation click
+                                  setLeftOpen(false); 
                                 }}
                                 className="group/btn flex items-center gap-1.5 rounded-lg border border-subtle bg-panel px-2.5 py-1.5 text-[12px] font-medium text-muted transition-colors hover:bg-subtle hover:text-txt"
                               >
@@ -258,7 +347,9 @@ export default function WorkspaceClientView({ notebook, initialSources }: { note
               {isLoading && messages[messages.length - 1]?.role === "user" && (
                 <div className="flex w-full items-start gap-4 py-2">
                   <div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-panel border border-subtle shadow-sm"><Loader2 className="h-4 w-4 animate-spin text-muted" /></div>
-                  <div className="flex-1 mt-1 text-[14px] font-medium text-muted animate-pulse">Retrieving insights...</div>
+                  <div className="flex-1 mt-1 text-[14px] font-medium text-muted animate-pulse">
+                    {isRoadmapMode ? "Architecting your personalized learning path..." : "Retrieving insights..."}
+                  </div>
                 </div>
               )}
             </div>
@@ -266,12 +357,33 @@ export default function WorkspaceClientView({ notebook, initialSources }: { note
         </div>
 
         <div className="absolute bottom-0 left-0 w-full pointer-events-none">
-          <div className="h-24 w-full bg-gradient-to-t from-base via-base/80 to-transparent" />
+          <div className="h-32 w-full bg-gradient-to-t from-base via-base/80 to-transparent" />
           <div className="bg-base px-4 sm:px-8 pb-6 pt-2 pointer-events-auto">
+            
             <form onSubmit={handleChatSubmit} className="mx-auto max-w-3xl">
-              <div className="relative flex items-center rounded-full border border-subtle bg-panel p-1.5 shadow-sm transition-all focus-within:border-txt/30 focus-within:ring-4 hover:border-txt/20">
-                <input type="text" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Message ChaiBookLM..." disabled={initialSources.length === 0 || isLoading} className="w-full bg-transparent px-5 py-3 text-[15px] text-txt placeholder:text-muted/60 outline-none disabled:opacity-50" />
-                <button type="submit" disabled={initialSources.length === 0 || isLoading || !input.trim()} className="mr-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-txt text-base transition-all hover:scale-105 active:scale-95 disabled:opacity-50"><ArrowUp className="h-5 w-5 text-base" /></button>
+              <div className={`relative flex items-center rounded-[24px] border ${isRoadmapMode ? 'border-emerald-500/10 bg-emerald-500/5 ring-2 ring-emerald-500/10' : 'border-subtle bg-panel focus-within:border-txt/30  hover:border-txt/20'} p-1.5 shadow-sm transition-all`}>
+                
+                <button 
+                  type="button" 
+                  onClick={() => setIsRoadmapMode(!isRoadmapMode)}
+                  className={`ml-1 flex h-10 text-xs px-3 shrink-0 items-center justify-center rounded-full transition-colors ${isRoadmapMode ? 'bg-emerald-500 text-white shadow-md' : 'bg-input text-muted hover:text-txt'}`}
+                  title={isRoadmapMode ? "Disable Roadmap Mode" : "Enable Roadmap Mode"}
+                >
+                  Make Roadmaps
+                </button>
+
+                <input 
+                  type="text" 
+                  value={input} 
+                  onChange={(e) => setInput(e.target.value)} 
+                  placeholder={isRoadmapMode ? "What do you want a roadmap for?" : "Message ChaiBookLM..."} 
+                  disabled={initialSources.length === 0 || isLoading} 
+                  className={`w-full bg-transparent px-4 py-3 text-[15px] ${isRoadmapMode ? 'text-emerald-500 placeholder:text-emerald-500/50' : 'text-txt placeholder:text-muted/60'} outline-none disabled:opacity-50`} 
+                />
+                
+                <button type="submit" disabled={initialSources.length === 0 || isLoading || !input.trim()} className={`mr-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-base transition-all hover:scale-105 active:scale-95 disabled:opacity-50 ${isRoadmapMode ? 'bg-emerald-500' : 'bg-neutral-950'}`}>
+                  <ArrowUp className="h-5 w-5 text-white" />
+                </button>
               </div>
             </form>
           </div>
@@ -279,8 +391,7 @@ export default function WorkspaceClientView({ notebook, initialSources }: { note
       </div>
 
       {/* RIGHT COLUMN: PRO SOURCE VIEWER */}
-      {/* EXPANDED WIDTH: Changed max width to w-[400px] xl:w-[500px] for better video/pdf experience */}
-      <div className={`hidden flex-col border-l border-subtle bg-panel/30 transition-all duration-300 ease-in-out lg:flex ${rightOpen ? "w-[400px] xl:w-[600px] opacity-100" : "w-0 overflow-hidden opacity-0 border-l-0"}`}>
+      <div className={`hidden flex-col border-l border-subtle bg-panel/30 transition-all duration-300 ease-in-out lg:flex ${rightOpen ? "w-[400px] xl:w-[500px] opacity-100" : "w-0 overflow-hidden opacity-0 border-l-0"}`}>
         <div className="flex h-12 shrink-0 items-center justify-between border-b border-subtle/50 px-4 bg-panel/50 backdrop-blur-md">
           <div className="flex items-center gap-2 overflow-hidden">
             {activePreview ? getSourceIcon(activePreview.type) : <Captions className="h-4 w-4 text-muted" />}
