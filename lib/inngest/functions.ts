@@ -62,6 +62,7 @@ export const processSourceDocument = inngest.createFunction(
 
       try {
         if (type === "YOUTUBE") {
+          // 🔥 Bulletproof Regex for YouTube Video ID
           const getYouTubeId = (url: string) => {
             const regExp =
               /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
@@ -72,11 +73,19 @@ export const processSourceDocument = inngest.createFunction(
           const videoId = getYouTubeId(fileUrl);
           if (!videoId) throw new Error("Invalid YouTube URL format");
 
-          const transcript = await YoutubeTranscript.fetchTranscript(videoId);
-          docs = transcript.map((t) => ({
-            pageContent: t.text,
-            metadata: { timestamp: Math.floor(t.offset / 1000) },
-          }));
+          // Fallback mechanism: Try package, if Vercel blocks it, throw clean message
+          try {
+            const transcript = await YoutubeTranscript.fetchTranscript(videoId);
+            docs = transcript.map((t) => ({
+              pageContent: t.text,
+              metadata: { timestamp: Math.floor(t.offset / 1000) },
+            }));
+          } catch (err) {
+            console.error("YouTube Transcript Blocked on Cloud:", err);
+            throw new Error(
+              "YouTube blocks server-side transcript fetching on Vercel IPs. Try using a Website URL or PDF transcript text instead.",
+            );
+          }
         } else if (type === "URL" || type === "WEBSITE") {
           const loader = new CheerioWebBaseLoader(fileUrl);
           const loadedDocs = await loader.load();
