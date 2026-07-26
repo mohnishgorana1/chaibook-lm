@@ -62,32 +62,41 @@ export const processSourceDocument = inngest.createFunction(
 
       try {
         if (type === "YOUTUBE") {
+          // 🔥 Bulletproof Regex for YouTube Video ID
+          const getYouTubeId = (url: string) => {
+            const regExp =
+              /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+            const match = url.match(regExp);
+            return match && match[2].length === 11 ? match[2] : null;
+          };
+
+          const videoId = getYouTubeId(fileUrl);
+          if (!videoId) throw new Error("Invalid YouTube URL format");
+
           try {
-            // 🔥 Extract Video ID first
-            const getYouTubeId = (url: string) => {
-              const regExp =
-                /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-              const match = url.match(regExp);
-              return match && match[2].length === 11 ? match[2] : null;
-            };
+            // 🔥 Using youtubei.js InnerTube client which bypasses Vercel IP blocks
+            const youtube = await Innertube.create();
+            const info = await youtube.getInfo(videoId);
+            const transcriptData = await info.getTranscript();
 
-            const videoId = getYouTubeId(fileUrl);
-            if (!videoId) throw new Error("Invalid YouTube URL format");
+            const segments =
+              transcriptData.transcript.content.body.initial_segments;
+            if (!segments || segments.length === 0) {
+              throw new Error("No transcript segments found for this video");
+            }
 
-            // 🔥 Pass 'videoId' matching YoutubeConfig definition
-            const loader = new YoutubeLoader({
-              videoId: videoId,
-              language: "en",
-              addVideoInfo: true,
-            });
-
-            const loadedDocs = await loader.load();
-            docs = loadedDocs.map((d) => ({
-              pageContent: d.pageContent,
-              metadata: { timestamp: d.metadata.chunk_timestamp || 0 },
-            }));
+            docs = segments
+              .filter((segment: any) => segment.snippet && segment.snippet.text)
+              .map((segment: any) => ({
+                pageContent: segment.snippet.text,
+                metadata: {
+                  timestamp: Math.floor(
+                    parseInt(segment.start_ms || "0") / 1000,
+                  ),
+                },
+              }));
           } catch (err) {
-            console.error("YoutubeLoader Failed:", err);
+            console.error("youtubei.js Transcript Extraction Failed:", err);
             throw new Error("Failed to extract data from YOUTUBE");
           }
         } else if (type === "URL" || type === "WEBSITE") {
