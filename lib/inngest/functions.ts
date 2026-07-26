@@ -62,29 +62,33 @@ export const processSourceDocument = inngest.createFunction(
 
       try {
         if (type === "YOUTUBE") {
-          // 🔥 Bulletproof Regex for YouTube Video ID
-          const getYouTubeId = (url: string) => {
-            const regExp =
-              /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-            const match = url.match(regExp);
-            return match && match[2].length === 11 ? match[2] : null;
-          };
-
-          const videoId = getYouTubeId(fileUrl);
-          if (!videoId) throw new Error("Invalid YouTube URL format");
-
-          // Fallback mechanism: Try package, if Vercel blocks it, throw clean message
           try {
-            const transcript = await YoutubeTranscript.fetchTranscript(videoId);
-            docs = transcript.map((t) => ({
-              pageContent: t.text,
-              metadata: { timestamp: Math.floor(t.offset / 1000) },
+            // 🔥 Extract Video ID first
+            const getYouTubeId = (url: string) => {
+              const regExp =
+                /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+              const match = url.match(regExp);
+              return match && match[2].length === 11 ? match[2] : null;
+            };
+
+            const videoId = getYouTubeId(fileUrl);
+            if (!videoId) throw new Error("Invalid YouTube URL format");
+
+            // 🔥 Pass 'videoId' matching YoutubeConfig definition
+            const loader = new YoutubeLoader({
+              videoId: videoId,
+              language: "en",
+              addVideoInfo: true,
+            });
+
+            const loadedDocs = await loader.load();
+            docs = loadedDocs.map((d) => ({
+              pageContent: d.pageContent,
+              metadata: { timestamp: d.metadata.chunk_timestamp || 0 },
             }));
           } catch (err) {
-            console.error("YouTube Transcript Blocked on Cloud:", err);
-            throw new Error(
-              "YouTube blocks server-side transcript fetching on Vercel IPs. Try using a Website URL or PDF transcript text instead.",
-            );
+            console.error("YoutubeLoader Failed:", err);
+            throw new Error("Failed to extract data from YOUTUBE");
           }
         } else if (type === "URL" || type === "WEBSITE") {
           const loader = new CheerioWebBaseLoader(fileUrl);
