@@ -62,7 +62,17 @@ export const processSourceDocument = inngest.createFunction(
 
       try {
         if (type === "YOUTUBE") {
-          const transcript = await YoutubeTranscript.fetchTranscript(fileUrl);
+          const getYouTubeId = (url: string) => {
+            const regExp =
+              /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+            const match = url.match(regExp);
+            return match && match[2].length === 11 ? match[2] : null;
+          };
+
+          const videoId = getYouTubeId(fileUrl);
+          if (!videoId) throw new Error("Invalid YouTube URL format");
+
+          const transcript = await YoutubeTranscript.fetchTranscript(videoId);
           docs = transcript.map((t) => ({
             pageContent: t.text,
             metadata: { timestamp: Math.floor(t.offset / 1000) },
@@ -70,13 +80,19 @@ export const processSourceDocument = inngest.createFunction(
         } else if (type === "URL" || type === "WEBSITE") {
           const loader = new CheerioWebBaseLoader(fileUrl);
           const loadedDocs = await loader.load();
-          docs = loadedDocs.map(d => ({ pageContent: d.pageContent, metadata: {} }));
+          docs = loadedDocs.map((d) => ({
+            pageContent: d.pageContent,
+            metadata: {},
+          }));
         } else if (type === "PDF") {
           const response = await fetch(fileUrl);
           const blob = await response.blob();
           const loader = new WebPDFLoader(blob);
           const loadedDocs = await loader.load();
-          docs = loadedDocs.map(d => ({ pageContent: d.pageContent, metadata: d.metadata }));
+          docs = loadedDocs.map((d) => ({
+            pageContent: d.pageContent,
+            metadata: d.metadata,
+          }));
         } else if (type === "TEXT" || type === "TRANSCRIPT") {
           const response = await fetch(fileUrl);
           const text = await response.text();
@@ -85,7 +101,8 @@ export const processSourceDocument = inngest.createFunction(
           throw new Error("Unsupported format type");
         }
 
-        if (!docs || docs.length === 0) throw new Error("Extracted text is empty");
+        if (!docs || docs.length === 0)
+          throw new Error("Extracted text is empty");
         return docs;
       } catch (error) {
         console.error(`🔥 ${type} Extraction Failed:`, error);
@@ -100,15 +117,22 @@ export const processSourceDocument = inngest.createFunction(
         chunkOverlap: 200,
       });
 
-      const documentObjects = rawDocs.map(d => new Document({ pageContent: d.pageContent, metadata: d.metadata }));
+      const documentObjects = rawDocs.map(
+        (d) =>
+          new Document({ pageContent: d.pageContent, metadata: d.metadata }),
+      );
       const splitDocs = await splitter.splitDocuments(documentObjects);
       return JSON.parse(JSON.stringify(splitDocs));
     });
 
     // Phase 4: OpenAI Embeddings & Qdrant Upload
     await step.run("generate-embeddings-and-save", async () => {
-      console.log(`⏳ Converting ${chunks.length} chunks into Vector Embeddings...`);
-      const embeddings = new OpenAIEmbeddings({ modelName: "text-embedding-3-small" });
+      console.log(
+        `⏳ Converting ${chunks.length} chunks into Vector Embeddings...`,
+      );
+      const embeddings = new OpenAIEmbeddings({
+        modelName: "text-embedding-3-small",
+      });
 
       const formattedChunks = chunks.map((chunk: any) => ({
         pageContent: chunk.pageContent,
@@ -137,5 +161,5 @@ export const processSourceDocument = inngest.createFunction(
     });
 
     return { success: true, sourceId };
-  }
+  },
 );
