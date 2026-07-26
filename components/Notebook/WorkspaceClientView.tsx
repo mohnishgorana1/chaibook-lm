@@ -126,6 +126,13 @@ export default function WorkspaceClientView({ notebook, initialSources }: { note
     }
   }, [initialSources, router]);
 
+  // SMART UI ACTION: Auto-close left sidebar when opening preview from left panel
+  const handleOpenPreview = (source: any) => {
+    setActivePreview({ title: source.title, type: source.type, contentUrl: source.sourceUrl, snippet: "Ask questions to see relevant chunks here." });
+    setRightOpen(true);
+    setLeftOpen(false); // <--- Added this to auto-close left sidebar
+  };
+
   const handleDeleteSource = async (e: React.MouseEvent, source: any) => {
     e.stopPropagation(); 
     if (!confirm(`Are you sure you want to delete "${source.title}"?`)) return;
@@ -146,15 +153,15 @@ export default function WorkspaceClientView({ notebook, initialSources }: { note
 
       {/* LEFT COLUMN: SOURCES */}
       <div className={`fixed inset-y-0 left-0 z-50 flex flex-col border-r border-subtle bg-panel/80 backdrop-blur-xl transition-all duration-300 ease-in-out lg:relative lg:z-0 ${leftOpen ? "w-[280px] translate-x-0" : "w-[280px] -translate-x-full lg:w-0 lg:-translate-x-full lg:border-r-0"} ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
-        <div className="flex h-16 shrink-0 items-center justify-between border-b border-subtle/50 px-5">
+        <div className="flex h-12 shrink-0 items-center justify-between border-b border-subtle/50 px-4">
           <div className="flex items-center gap-3 overflow-hidden">
-            <Link href="/notebook" className="shrink-0 rounded-full p-1.5 text-muted transition-colors hover:bg-input hover:text-txt"><ArrowLeft className="h-4 w-4" /></Link>
+            <Link href="/notebook" className="shrink-0 rounded-full p-1 text-muted transition-colors hover:bg-input hover:text-txt"><ArrowLeft className="h-4 w-4" /></Link>
             <div className="flex flex-col overflow-hidden">
-              <h2 className="truncate text-[14px] font-semibold tracking-tight text-txt">{notebook.title}</h2>
-              <span className="text-[11px] font-medium text-muted">{initialSources.length} Sources</span>
+              <h2 className="truncate text-[13px] font-semibold tracking-tight text-txt">{notebook.title}</h2>
+              <span className="text-[10px] font-medium text-muted">{initialSources.length} Sources</span>
             </div>
           </div>
-          <button onClick={() => setMobileMenuOpen(false)} className="lg:hidden p-2 text-muted hover:text-txt"><X className="h-5 w-5" /></button>
+          <button onClick={() => setMobileMenuOpen(false)} className="lg:hidden p-1.5 text-muted hover:text-txt"><X className="h-4 w-4" /></button>
         </div>
 
         <div className="p-4 shrink-0"><AddSourceModal notebookId={notebook._id} /></div>
@@ -166,7 +173,7 @@ export default function WorkspaceClientView({ notebook, initialSources }: { note
               <div className="rounded-2xl border border-dashed border-subtle p-5 text-center"><p className="text-[12px] leading-relaxed text-muted">No sources yet.</p></div>
             ) : (
               initialSources.map((src) => (
-                <div key={src._id} onClick={() => { setActivePreview({ title: src.title, type: src.type, contentUrl: src.sourceUrl, snippet: "Ask questions to see relevant chunks here." }); setRightOpen(true); }} className={`group relative flex cursor-pointer items-start gap-3 rounded-2xl border p-2.5 transition-colors ${activePreview?.title === src.title ? "bg-input border-subtle" : "border-transparent hover:bg-input/50"}`}>
+                <div key={src._id} onClick={() => handleOpenPreview(src)} className={`group relative flex cursor-pointer items-start gap-3 rounded-2xl border p-2.5 transition-colors ${activePreview?.title === src.title ? "bg-input border-subtle" : "border-transparent hover:bg-input/50"}`}>
                   <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-panel shadow-sm">{getSourceIcon(src.type)}</div>
                   <div className="flex flex-col overflow-hidden pr-8">
                     <span className="truncate text-[13px] font-medium text-txt" title={src.title}>{src.title}</span>
@@ -184,19 +191,19 @@ export default function WorkspaceClientView({ notebook, initialSources }: { note
 
       {/* MIDDLE COLUMN: CHAT */}
       <div className="relative flex flex-1 flex-col min-w-0 bg-base transition-all duration-300">
-        <div className="flex h-16 shrink-0 items-center justify-between border-b border-subtle/50 bg-panel/40 px-4 backdrop-blur-md z-10">
+        <div className="flex h-12 shrink-0 items-center justify-between border-b border-subtle/50 bg-panel/40 px-4 backdrop-blur-md z-10">
           <div className="flex items-center gap-2">
-            <button onClick={() => setLeftOpen(!leftOpen)} className="hidden rounded-xl p-2 text-muted transition-colors hover:bg-subtle hover:text-txt lg:block">
-              {leftOpen ? <PanelLeftClose className="h-5 w-5" /> : <PanelLeft className="h-5 w-5" />}
+            <button onClick={() => setLeftOpen(!leftOpen)} className="hidden rounded-xl p-1.5 text-muted transition-colors hover:bg-subtle hover:text-txt lg:block">
+              {leftOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeft className="h-4 w-4" />}
             </button>
-            <button onClick={() => setMobileMenuOpen(true)} className="rounded-xl p-2 text-muted transition-colors hover:bg-subtle hover:text-txt lg:hidden"><Menu className="h-5 w-5" /></button>
+            <button onClick={() => setMobileMenuOpen(true)} className="rounded-xl p-1.5 text-muted transition-colors hover:bg-subtle hover:text-txt lg:hidden"><Menu className="h-4 w-4" /></button>
           </div>
           <div className="flex items-center gap-2 text-txt">
             <Sparkles className="h-4 w-4 text-emerald-500" />
             <span className="text-[13px] font-bold tracking-wide">ChaiBookLM</span>
           </div>
-          <button onClick={() => setRightOpen(!rightOpen)} className="hidden rounded-xl p-2 text-muted transition-colors hover:bg-subtle hover:text-txt lg:block">
-            {rightOpen ? <PanelRightClose className="h-5 w-5" /> : <PanelRight className="h-5 w-5" />}
+          <button onClick={() => setRightOpen(!rightOpen)} className="hidden rounded-xl p-1.5 text-muted transition-colors hover:bg-subtle hover:text-txt lg:block">
+            {rightOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRight className="h-4 w-4" />}
           </button>
         </div>
 
@@ -230,6 +237,7 @@ export default function WorkspaceClientView({ notebook, initialSources }: { note
                                 onClick={() => {
                                   setActivePreview({ title: cite.title || `Source ${i + 1}`, type: cite.type, contentUrl: cite.url, snippet: cite.snippet, pageNumber: cite.pageNumber ? Number(cite.pageNumber) : undefined, timestamp: cite.timestamp ? Number(cite.timestamp) : undefined });
                                   setRightOpen(true);
+                                  setLeftOpen(false); // <--- SMART UI ACTION: Auto-close left sidebar on citation click
                                 }}
                                 className="group/btn flex items-center gap-1.5 rounded-lg border border-subtle bg-panel px-2.5 py-1.5 text-[12px] font-medium text-muted transition-colors hover:bg-subtle hover:text-txt"
                               >
@@ -271,8 +279,9 @@ export default function WorkspaceClientView({ notebook, initialSources }: { note
       </div>
 
       {/* RIGHT COLUMN: PRO SOURCE VIEWER */}
-      <div className={`hidden flex-col border-l border-subtle bg-panel/30 transition-all duration-300 ease-in-out lg:flex ${rightOpen ? "w-[360px] xl:w-[420px] opacity-100" : "w-0 overflow-hidden opacity-0 border-l-0"}`}>
-        <div className="flex h-16 shrink-0 items-center justify-between border-b border-subtle/50 px-5 bg-panel/50 backdrop-blur-md">
+      {/* EXPANDED WIDTH: Changed max width to w-[400px] xl:w-[500px] for better video/pdf experience */}
+      <div className={`hidden flex-col border-l border-subtle bg-panel/30 transition-all duration-300 ease-in-out lg:flex ${rightOpen ? "w-[400px] xl:w-[600px] opacity-100" : "w-0 overflow-hidden opacity-0 border-l-0"}`}>
+        <div className="flex h-12 shrink-0 items-center justify-between border-b border-subtle/50 px-4 bg-panel/50 backdrop-blur-md">
           <div className="flex items-center gap-2 overflow-hidden">
             {activePreview ? getSourceIcon(activePreview.type) : <Captions className="h-4 w-4 text-muted" />}
             <span className="truncate text-[13px] font-semibold text-txt" title={activePreview?.title}>{activePreview ? activePreview.title : "Source Viewer"}</span>
