@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Plus, X, UploadCloud, Link2, Loader2, Type } from "lucide-react";
+import { Plus, X, UploadCloud, Link2, Loader2, Type, File as FileIcon } from "lucide-react";
 import { FaYoutube } from 'react-icons/fa'
 import { supabase } from "@/lib/supabase/client";
 import { createSourceAction } from "@/lib/actions/source/source.actions";
@@ -15,16 +15,62 @@ export default function AddSourceModal({ notebookId }: { notebookId: string }) {
   const [rawTextInput, setRawTextInput] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // 🔥 Drag & Drop state
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  // 🔥 Validation Logic
+  const isValidFile = (file: File) => {
+    const validExtensions = ['pdf', 'txt', 'csv', 'md', 'vtt', 'srt'];
+    const fileExt = file.name.split('.').pop()?.toLowerCase();
+    return fileExt ? validExtensions.includes(fileExt) : false;
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+      const selectedFile = e.target.files[0];
+      if (isValidFile(selectedFile)) {
+        setFile(selectedFile);
+      } else {
+        alert("Unsupported file format! Please select a PDF, TXT, CSV, MD, VTT, or SRT file.");
+        e.target.value = ''; 
+      }
     }
   };
+
+  // 🔥 Drag Events Setup
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const droppedFiles = e.dataTransfer.files;
+    if (droppedFiles && droppedFiles.length > 0) {
+      const selectedFile = droppedFiles[0];
+      if (isValidFile(selectedFile)) {
+        setFile(selectedFile);
+      } else {
+        alert("Unsupported file format! Please drop a PDF, TXT, CSV, MD, VTT, or SRT file.");
+      }
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,20 +82,16 @@ export default function AddSourceModal({ notebookId }: { notebookId: string }) {
       let sourceTitle = "";
 
       if (activeTab === "link") {
-        // --- 1. LINK LOGIC ---
         if (!urlInput.trim()) return;
         finalSourceUrl = urlInput;
         sourceTitle = urlInput;
         sourceType = urlInput.includes("youtube.com") || urlInput.includes("youtu.be") ? "YOUTUBE" : "URL";
       }
       else if (activeTab === "text") {
-        // --- 2. RAW TEXT LOGIC (Smart Conversion to File) ---
         if (!rawTextInput.trim()) return;
         sourceType = "TEXT";
-        // Title me shuru ke kuch words daal dete hain
         sourceTitle = `Text: ${rawTextInput.substring(0, 20)}...`;
 
-        // Raw text ko ek TXT File/Blob me convert kar diya
         const textFile = new File([rawTextInput], `pasted-text-${Date.now()}.txt`, { type: "text/plain" });
 
         const { data, error } = await supabase.storage
@@ -62,7 +104,6 @@ export default function AddSourceModal({ notebookId }: { notebookId: string }) {
         finalSourceUrl = publicUrlData.publicUrl;
       }
       else {
-        // --- 3. FILE UPLOAD LOGIC ---
         if (!file) return;
 
         const fileExt = file.name.split('.').pop()?.toLowerCase();
@@ -82,7 +123,6 @@ export default function AddSourceModal({ notebookId }: { notebookId: string }) {
         finalSourceUrl = publicUrlData.publicUrl;
       }
 
-      // --- 4. CREATE MONGODB DOCUMENT ---
       await createSourceAction({
         notebookId,
         title: sourceTitle,
@@ -90,7 +130,6 @@ export default function AddSourceModal({ notebookId }: { notebookId: string }) {
         sourceUrl: finalSourceUrl
       });
 
-      // --- 5. CLEANUP & CLOSE ---
       setIsOpen(false);
       setUrlInput("");
       setRawTextInput("");
@@ -120,7 +159,7 @@ export default function AddSourceModal({ notebookId }: { notebookId: string }) {
           </button>
         </div>
 
-        {/* Tab Switcher */}
+        {/* Tabs */}
         <div className="flex w-full border-b border-subtle bg-base/50">
           <button onClick={() => setActiveTab("file")} className={`flex flex-1 items-center justify-center gap-2 py-3 text-sm font-semibold transition-colors ${activeTab === "file" ? "border-b-2 border-orange-500 text-orange-500" : "text-muted hover:text-txt"}`}>
             <UploadCloud className="h-4 w-4" /> File
@@ -136,16 +175,47 @@ export default function AddSourceModal({ notebookId }: { notebookId: string }) {
         <form onSubmit={handleSubmit}>
           <div className="p-6">
 
-            {/* FILE TAB */}
+            {/* 🔥 FILE TAB (Drag & Drop + Validation) */}
             {activeTab === "file" && (
-              <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-subtle bg-base p-8 text-center transition-colors hover:border-orange-500/50 hover:bg-orange-500/5">
-                <UploadCloud className="mb-4 h-10 w-10 text-orange-500/50" />
-                <h3 className="mb-1 text-sm font-bold text-txt">{file ? file.name : "Click to upload file"}</h3>
-                <p className="mb-4 text-xs font-medium text-muted">PDF, TXT, CSV, MD, VTT, SRT</p>
-                <input type="file" className="hidden" id="file-upload" accept=".pdf,.txt,.csv,.md,.vtt,.srt" onChange={handleFileChange} />
-                <label htmlFor="file-upload" className="cursor-pointer rounded-lg bg-panel px-4 py-2 text-sm font-semibold text-txt border border-subtle hover:bg-subtle transition-colors">
-                  {file ? "Change File" : "Select File"}
-                </label>
+              <div 
+                className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 text-center transition-all duration-200 cursor-pointer ${
+                  isDragging 
+                    ? "border-orange-500 bg-orange-500/10 scale-[1.02]" 
+                    : file 
+                      ? "border-emerald-500/50 bg-emerald-500/5 hover:bg-emerald-500/10" 
+                      : "border-subtle bg-base hover:border-orange-500/50 hover:bg-orange-500/5"
+                }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()} 
+              >
+                {file ? (
+                   <>
+                     <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-500">
+                        <FileIcon className="h-6 w-6" />
+                     </div>
+                     <h3 className="mb-1 text-sm font-bold text-txt truncate max-w-[250px]">{file.name}</h3>
+                     <p className="text-xs font-medium text-emerald-500">Ready to upload</p>
+                   </>
+                ) : (
+                   <>
+                    <UploadCloud className={`mb-4 h-10 w-10 transition-colors duration-200 ${isDragging ? "text-orange-500" : "text-orange-500/50"}`} />
+                    <h3 className="mb-1 text-sm font-bold text-txt">
+                        {isDragging ? "Drop file here" : "Click or drag file to this area"}
+                    </h3>
+                    <p className="mb-4 text-xs font-medium text-muted">Supports PDF, TXT, CSV, MD, VTT, SRT</p>
+                   </>
+                )}
+                
+                <input 
+                  type="file" 
+                  ref={fileInputRef}
+                  className="hidden" 
+                  id="file-upload" 
+                  accept=".pdf,.txt,.csv,.md,.vtt,.srt" 
+                  onChange={handleFileChange} 
+                />
               </div>
             )}
 
