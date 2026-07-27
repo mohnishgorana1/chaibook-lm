@@ -5,6 +5,7 @@ import { WebPDFLoader } from "@langchain/community/document_loaders/web/pdf";
 
 import { YoutubeLoader } from "@langchain/community/document_loaders/web/youtube";
 import { YoutubeTranscript } from "youtube-transcript";
+import { Innertube } from "youtubei.js";
 
 import { CheerioWebBaseLoader } from "@langchain/community/document_loaders/web/cheerio";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
