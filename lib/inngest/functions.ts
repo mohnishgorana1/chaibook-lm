@@ -23,11 +23,13 @@ export const processSourceDocument = inngest.createFunction(
     const { sourceId, fileUrl, type, notebookId } = event.data;
 
     // Phase 1: Update Status
+    console.log("Starting Phase 1: Update Status ");
     await step.run("update-status-processing", async () => {
       await dbConnect();
       await Source.findByIdAndUpdate(sourceId, { status: "PROCESSING" });
     });
-    
+
+    console.log("Starting Phase 1.a: Fetce source title ");
     // 🔥 SMART TITLE FETCHER: Agar title URL hai, toh asli Title fetch karo
     const sourceTitle = await step.run("get-source-title", async () => {
       await dbConnect();
@@ -76,6 +78,9 @@ export const processSourceDocument = inngest.createFunction(
     });
 
     // Phase 2: Dynamic Extraction WITH METADATA PRESERVATION
+    console.log(
+      "Starting Phase 2: Dynamic Extraction WITH METADATA PRESERVATION ",
+    );
     const rawDocs = await step.run("extract-docs", async () => {
       console.log(`🚀 Extracting text from ${type} URL: ${fileUrl}`);
       let docs: any[] = [];
@@ -171,6 +176,7 @@ export const processSourceDocument = inngest.createFunction(
     });
 
     // Phase 3: Text Chunking
+    console.log("Starting Phase 3: Text Chunking ");
     const chunks = await step.run("chunk-text", async () => {
       const splitter = new RecursiveCharacterTextSplitter({
         chunkSize: 1000,
@@ -186,6 +192,7 @@ export const processSourceDocument = inngest.createFunction(
     });
 
     // Phase 4: OpenAI Embeddings & Qdrant Upload
+    console.log("Starting Phase 4: OpenAI Embeddings & Qdrant Upload ");
     await step.run("generate-embeddings-and-save", async () => {
       console.log(
         `⏳ Converting ${chunks.length} chunks into Vector Embeddings...`,
@@ -215,6 +222,7 @@ export const processSourceDocument = inngest.createFunction(
     });
 
     // Phase 5: Status Ready
+    console.log("Starting Phase 5: Status Ready ");
     await step.run("update-status-ready", async () => {
       await dbConnect();
       await Source.findByIdAndUpdate(sourceId, { status: "READY" });

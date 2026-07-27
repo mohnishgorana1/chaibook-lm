@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { BookOpen } from "lucide-react";
+import { BookOpen, Edit2, Trash2 } from "lucide-react"; // 🔥 Trash2 import kiya
 
 interface Notebook {
   id?: string;
@@ -16,7 +16,12 @@ interface Notebook {
   isOptimistic?: boolean;
 }
 
-export default function NotebookCard({ notebook }: { notebook: Notebook }) {
+interface NotebookCardProps {
+    notebook: Notebook;
+    onAction: (type: "rename" | "delete", notebook: Notebook) => void; // 🔥 Update prop type
+}
+
+export default function NotebookCard({ notebook, onAction }: NotebookCardProps) {
   const notebookId = notebook._id || notebook.id;
 
   const updatedDateLabel = notebook.updatedAt
@@ -27,11 +32,42 @@ export default function NotebookCard({ notebook }: { notebook: Notebook }) {
     })
     : "No date";
 
+  // 🔥 Open Modal Handlers
+  const handleEditClick = (e: React.MouseEvent) => {
+    e.preventDefault(); 
+    e.stopPropagation(); 
+    onAction("rename", notebook);
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.preventDefault(); 
+    e.stopPropagation(); 
+    onAction("delete", notebook);
+  };
+
   const CardContent = (
     <div className={`group relative flex h-44 flex-col justify-between rounded-[24px] border border-subtle bg-panel p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-black/5 dark:hover:shadow-white/5 ${notebook.borderColor}`}>
       <div className="flex items-start justify-between">
         <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${notebook.accentBg} ${notebook.accentColor} shadow-inner transition-transform duration-300 group-hover:scale-110`}>
           <BookOpen className="h-5 w-5" />
+        </div>
+
+        {/* 🔥 Actions Row on Top Right */}
+        <div className="flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+            <button
+                onClick={handleEditClick}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-transparent text-muted transition-all hover:bg-subtle hover:text-txt"
+                title="Rename Notebook"
+            >
+                <Edit2 className="h-4 w-4" />
+            </button>
+            <button
+                onClick={handleDeleteClick}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-transparent text-muted transition-all hover:bg-red-500/10 hover:text-red-500"
+                title="Delete Notebook"
+            >
+                <Trash2 className="h-4 w-4" />
+            </button>
         </div>
       </div>
       <div>
