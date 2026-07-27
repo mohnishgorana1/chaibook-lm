@@ -27,7 +27,7 @@ export const processSourceDocument = inngest.createFunction(
       await dbConnect();
       await Source.findByIdAndUpdate(sourceId, { status: "PROCESSING" });
     });
-
+    
     // 🔥 SMART TITLE FETCHER: Agar title URL hai, toh asli Title fetch karo
     const sourceTitle = await step.run("get-source-title", async () => {
       await dbConnect();
@@ -37,20 +37,37 @@ export const processSourceDocument = inngest.createFunction(
       // Check if title is basically the URL
       if (src && (title === src.sourceUrl || title.startsWith("http"))) {
         try {
-          const res = await fetch(src.sourceUrl);
-          const html = await res.text();
-          // Extract title tag using Regex
-          const match = html.match(/<title>([^<]*)<\/title>/i);
-          if (match && match[1]) {
-            title = match[1].trim();
-            // Clean up YouTube default suffix
-            if (title.endsWith("- YouTube")) {
-              title = title.replace("- YouTube", "").trim();
+          // 🔥 YOUTUBE SPECIFIC TITLE FETCHER (Bypasses Vercel Block)
+          if (
+            src.sourceUrl.includes("youtube.com") ||
+            src.sourceUrl.includes("youtu.be")
+          ) {
+            const oembedRes = await fetch(
+              `https://www.youtube.com/oembed?url=${encodeURIComponent(src.sourceUrl)}&format=json`,
+            );
+            if (oembedRes.ok) {
+              const oembedData = await oembedRes.json();
+              title = oembedData.title || title;
             }
-            // Update the Database with the real name!
-            await Source.findByIdAndUpdate(sourceId, { title });
-            console.log(`✅ Fixed Title from URL to: ${title}`);
           }
+          // 🔥 NORMAL WEBSITE TITLE FETCHER
+          else {
+            const res = await fetch(src.sourceUrl);
+            const html = await res.text();
+            const match = html.match(/<title>([^<]*)<\/title>/i);
+            if (match && match[1]) {
+              title = match[1].trim();
+            }
+          }
+
+          // Clean up YouTube default suffix
+          if (title.endsWith("- YouTube")) {
+            title = title.replace("- YouTube", "").trim();
+          }
+
+          // Update the Database with the real name!
+          await Source.findByIdAndUpdate(sourceId, { title });
+          console.log(`✅ Fixed Title from URL to: ${title}`);
         } catch (e) {
           console.error("Could not fetch real title, keeping original.");
         }
@@ -64,20 +81,20 @@ export const processSourceDocument = inngest.createFunction(
       let docs: any[] = [];
 
       try {
-       if (type === "YOUTUBE") {
+        if (type === "YOUTUBE") {
           try {
             console.log("Fetching via RapidAPI to bypass Vercel Blocks...");
-            
+
             // Note: Tumhari screenshot wali API puri URL maang rahi hai, isliye hum fileUrl bhejenge
             const encodedUrl = encodeURIComponent(fileUrl);
-            const apiUrl = `https://youtube-transcript3.p.rapidapi.com/api/transcript-with-url?url=${encodedUrl}&flat_text=true&lang=en`; 
-            
+            const apiUrl = `https://youtube-transcript3.p.rapidapi.com/api/transcript-with-url?url=${encodedUrl}&flat_text=true&lang=en`;
+
             const options = {
-              method: 'GET',
+              method: "GET",
               headers: {
-                'x-rapidapi-key': process.env.RAPIDAPI_KEY as string, 
-                'x-rapidapi-host': 'youtube-transcript3.p.rapidapi.com' 
-              }
+                "x-rapidapi-key": process.env.RAPIDAPI_KEY as string,
+                "x-rapidapi-host": "youtube-transcript3.p.rapidapi.com",
+              },
             };
 
             const response = await fetch(apiUrl, options);
@@ -92,16 +109,23 @@ export const processSourceDocument = inngest.createFunction(
             if (Array.isArray(data)) {
               docs = data.map((item: any) => ({
                 pageContent: item.text,
-                metadata: { 
-                  timestamp: Math.floor(item.start || item.offset || 0) 
-                }
+                metadata: {
+                  timestamp: Math.floor(item.start || item.offset || 0),
+                },
               }));
             } else if (data && data.transcript) {
               // In case it returns an object with a flat transcript string
-              docs = [{ pageContent: data.transcript, metadata: { timestamp: 0 } }];
+              docs = [
+                { pageContent: data.transcript, metadata: { timestamp: 0 } },
+              ];
             } else {
               // Fallback
-               docs = [{ pageContent: JSON.stringify(data), metadata: { timestamp: 0 } }];
+              docs = [
+                {
+                  pageContent: JSON.stringify(data),
+                  metadata: { timestamp: 0 },
+                },
+              ];
             }
 
             if (docs.length === 0) {
@@ -109,7 +133,6 @@ export const processSourceDocument = inngest.createFunction(
             }
 
             console.log(`✅ Extracted chunks successfully via RapidAPI!`);
-
           } catch (err: any) {
             console.error("RapidAPI Extractor Failed:", err);
             throw new Error(`REAL_YOUTUBE_ERROR: ${err.message}`);
