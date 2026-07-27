@@ -2,8 +2,10 @@ import { inngest } from "./client";
 import dbConnect from "@/lib/dbConnect";
 import Source from "@/models/source.model";
 import { WebPDFLoader } from "@langchain/community/document_loaders/web/pdf";
+
 import { YoutubeLoader } from "@langchain/community/document_loaders/web/youtube";
 import { YoutubeTranscript } from "youtube-transcript";
+
 import { CheerioWebBaseLoader } from "@langchain/community/document_loaders/web/cheerio";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { OpenAIEmbeddings } from "@langchain/openai";
@@ -62,7 +64,6 @@ export const processSourceDocument = inngest.createFunction(
 
       try {
         if (type === "YOUTUBE") {
-          // 🔥 Bulletproof Regex for YouTube Video ID
           const getYouTubeId = (url: string) => {
             const regExp =
               /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
@@ -74,13 +75,16 @@ export const processSourceDocument = inngest.createFunction(
           if (!videoId) throw new Error("Invalid YouTube URL format");
 
           try {
-            // 🔥 Using youtubei.js InnerTube client which bypasses Vercel IP blocks
-            const youtube = await Innertube.create();
+            // 🔥 generate_session_locally bypasses many Vercel cloud blocks
+            const youtube = await Innertube.create({
+              generate_session_locally: true,
+            });
             const info = await youtube.getInfo(videoId);
             const transcriptData = await info.getTranscript();
 
             const segments =
-              transcriptData.transcript.content.body.initial_segments;
+              transcriptData.transcript?.content?.body?.initial_segments;
+
             if (!segments || segments.length === 0) {
               throw new Error("No transcript segments found for this video");
             }
@@ -95,9 +99,12 @@ export const processSourceDocument = inngest.createFunction(
                   ),
                 },
               }));
-          } catch (err) {
+          } catch (err: any) {
+            // 🔥 Ab humein exact error Inngest Dashboard mein dikhega!
             console.error("youtubei.js Transcript Extraction Failed:", err);
-            throw new Error("Failed to extract data from YOUTUBE");
+            throw new Error(
+              `REAL_YOUTUBE_ERROR: ${err.message || JSON.stringify(err)}`,
+            );
           }
         } else if (type === "URL" || type === "WEBSITE") {
           const loader = new CheerioWebBaseLoader(fileUrl);
