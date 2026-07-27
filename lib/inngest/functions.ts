@@ -76,36 +76,68 @@ export const processSourceDocument = inngest.createFunction(
           if (!videoId) throw new Error("Invalid YouTube URL format");
 
           try {
-            // 🔥 generate_session_locally bypasses many Vercel cloud blocks
-            const youtube = await Innertube.create({
-              generate_session_locally: true,
-            });
-            const info = await youtube.getInfo(videoId);
-            const transcriptData = await info.getTranscript();
+            // 🔥 STEP 1: Fetch raw YouTube page HTML masquerading as a normal browser
+            const response = await fetch(
+              `https://www.youtube.com/watch?v=${videoId}`,
+              {
+                headers: {
+                  "User-Agent":
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                  "Accept-Language": "en-US,en;q=0.9",
+                },
+              },
+            );
+            const html = await response.text();
 
-            const segments =
-              transcriptData.transcript?.content?.body?.initial_segments;
+            // 🔥 STEP 2: Extract the hidden subtitle URL using Regex
+            const captionRegex =
+              /"captionTracks":\s*\[\s*\{\s*"baseUrl":\s*"([^"]+)"/;
+            const match = captionRegex.exec(html);
 
-            if (!segments || segments.length === 0) {
-              throw new Error("No transcript segments found for this video");
+            if (!match || !match[1]) {
+              throw new Error(
+                "No captions found for this video. They might be disabled.",
+              );
             }
 
-            docs = segments
-              .filter((segment: any) => segment.snippet && segment.snippet.text)
-              .map((segment: any) => ({
-                pageContent: segment.snippet.text,
+            // Clean up the URL (YouTube escapes characters in JSON)
+            const captionUrl = match[1]
+              .replace(/\\u0026/g, "&")
+              .replace(/\\\//g, "/");
+
+            // 🔥 STEP 3: Fetch the actual XML transcript
+            const transcriptResponse = await fetch(captionUrl);
+            const transcriptXml = await transcriptResponse.text();
+
+            // 🔥 STEP 4: Parse XML to extract text and timestamps
+            const textRegex = /<text start="([^"]+)"[^>]*>([^<]+)<\/text>/g;
+            let xmlMatch;
+            docs = [];
+
+            while ((xmlMatch = textRegex.exec(transcriptXml)) !== null) {
+              const startStr = xmlMatch[1];
+              let text = xmlMatch[2];
+
+              // Clean HTML entities
+              text = text
+                .replace(/&amp;/g, "&")
+                .replace(/&#39;/g, "'")
+                .replace(/&quot;/g, '"');
+
+              docs.push({
+                pageContent: text,
                 metadata: {
-                  timestamp: Math.floor(
-                    parseInt(segment.start_ms || "0") / 1000,
-                  ),
+                  timestamp: Math.floor(parseFloat(startStr)),
                 },
-              }));
+              });
+            }
+
+            if (docs.length === 0) {
+              throw new Error("Failed to parse transcript XML.");
+            }
           } catch (err: any) {
-            // 🔥 Ab humein exact error Inngest Dashboard mein dikhega!
-            console.error("youtubei.js Transcript Extraction Failed:", err);
-            throw new Error(
-              `REAL_YOUTUBE_ERROR: ${err.message || JSON.stringify(err)}`,
-            );
+            console.error("Custom YouTube Extractor Failed:", err);
+            throw new Error(`REAL_YOUTUBE_ERROR: ${err.message}`);
           }
         } else if (type === "URL" || type === "WEBSITE") {
           const loader = new CheerioWebBaseLoader(fileUrl);
