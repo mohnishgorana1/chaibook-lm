@@ -76,67 +76,45 @@ export const processSourceDocument = inngest.createFunction(
           if (!videoId) throw new Error("Invalid YouTube URL format");
 
           try {
-            // 🔥 STEP 1: Fetch raw YouTube page HTML masquerading as a normal browser
-            const response = await fetch(
-              `https://www.youtube.com/watch?v=${videoId}`,
-              {
-                headers: {
-                  "User-Agent":
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                  "Accept-Language": "en-US,en;q=0.9",
-                },
+            console.log("Fetching via RapidAPI to bypass Vercel Blocks...");
+
+            // 🔥 Yahan apni specific API ka URL daalna
+            const apiUrl = `https://youtube-transcript3.p.rapidapi.com/api/transcript-v2?videoId=${videoId}`;
+
+            const options = {
+              method: "GET",
+              headers: {
+                "x-rapidapi-key": process.env.RAPIDAPI_KEY as string,
+                "x-rapidapi-host": "youtube-transcript3.p.rapidapi.com",
               },
-            );
-            const html = await response.text();
+            };
 
-            // 🔥 STEP 2: Extract the hidden subtitle URL using Regex
-            const captionRegex =
-              /"captionTracks":\s*\[\s*\{\s*"baseUrl":\s*"([^"]+)"/;
-            const match = captionRegex.exec(html);
+            const response = await fetch(apiUrl, options);
+            const data = await response.json();
 
-            if (!match || !match[1]) {
-              throw new Error(
-                "No captions found for this video. They might be disabled.",
-              );
+            if (!response.ok) {
+              throw new Error(`API Error: ${JSON.stringify(data)}`);
             }
 
-            // Clean up the URL (YouTube escapes characters in JSON)
-            const captionUrl = match[1]
-              .replace(/\\u0026/g, "&")
-              .replace(/\\\//g, "/");
-
-            // 🔥 STEP 3: Fetch the actual XML transcript
-            const transcriptResponse = await fetch(captionUrl);
-            const transcriptXml = await transcriptResponse.text();
-
-            // 🔥 STEP 4: Parse XML to extract text and timestamps
-            const textRegex = /<text start="([^"]+)"[^>]*>([^<]+)<\/text>/g;
-            let xmlMatch;
-            docs = [];
-
-            while ((xmlMatch = textRegex.exec(transcriptXml)) !== null) {
-              const startStr = xmlMatch[1];
-              let text = xmlMatch[2];
-
-              // Clean HTML entities
-              text = text
-                .replace(/&amp;/g, "&")
-                .replace(/&#39;/g, "'")
-                .replace(/&quot;/g, '"');
-
-              docs.push({
-                pageContent: text,
-                metadata: {
-                  timestamp: Math.floor(parseFloat(startStr)),
-                },
-              });
-            }
+            // 🔥 JSON Data ko Document Chunks mein map karna
+            // Note: Data format API to API thoda alag ho sakta hai, console me dekh lena
+            // Mostly APIs array of objects return karti hain jisme { text, start } hota hai
+            docs = data.map((item: any) => ({
+              pageContent: item.text,
+              metadata: {
+                timestamp: Math.floor(item.start || item.offset || 0),
+              },
+            }));
 
             if (docs.length === 0) {
-              throw new Error("Failed to parse transcript XML.");
+              throw new Error("RapidAPI returned an empty transcript.");
             }
+
+            console.log(
+              `✅ Extracted ${docs.length} chunks successfully via RapidAPI!`,
+            );
           } catch (err: any) {
-            console.error("Custom YouTube Extractor Failed:", err);
+            console.error("RapidAPI Extractor Failed:", err);
             throw new Error(`REAL_YOUTUBE_ERROR: ${err.message}`);
           }
         } else if (type === "URL" || type === "WEBSITE") {
