@@ -64,29 +64,20 @@ export const processSourceDocument = inngest.createFunction(
       let docs: any[] = [];
 
       try {
-        if (type === "YOUTUBE") {
-          const getYouTubeId = (url: string) => {
-            const regExp =
-              /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-            const match = url.match(regExp);
-            return match && match[2].length === 11 ? match[2] : null;
-          };
-
-          const videoId = getYouTubeId(fileUrl);
-          if (!videoId) throw new Error("Invalid YouTube URL format");
-
+       if (type === "YOUTUBE") {
           try {
             console.log("Fetching via RapidAPI to bypass Vercel Blocks...");
-
-            // 🔥 Yahan apni specific API ka URL daalna
-            const apiUrl = `https://youtube-transcript3.p.rapidapi.com/api/transcript-v2?videoId=${videoId}`;
-
+            
+            // Note: Tumhari screenshot wali API puri URL maang rahi hai, isliye hum fileUrl bhejenge
+            const encodedUrl = encodeURIComponent(fileUrl);
+            const apiUrl = `https://youtube-transcript3.p.rapidapi.com/api/transcript-with-url?url=${encodedUrl}&flat_text=true&lang=en`; 
+            
             const options = {
-              method: "GET",
+              method: 'GET',
               headers: {
-                "x-rapidapi-key": process.env.RAPIDAPI_KEY as string,
-                "x-rapidapi-host": "youtube-transcript3.p.rapidapi.com",
-              },
+                'x-rapidapi-key': process.env.RAPIDAPI_KEY as string, 
+                'x-rapidapi-host': 'youtube-transcript3.p.rapidapi.com' 
+              }
             };
 
             const response = await fetch(apiUrl, options);
@@ -96,23 +87,29 @@ export const processSourceDocument = inngest.createFunction(
               throw new Error(`API Error: ${JSON.stringify(data)}`);
             }
 
-            // 🔥 JSON Data ko Document Chunks mein map karna
-            // Note: Data format API to API thoda alag ho sakta hai, console me dekh lena
-            // Mostly APIs array of objects return karti hain jisme { text, start } hota hai
-            docs = data.map((item: any) => ({
-              pageContent: item.text,
-              metadata: {
-                timestamp: Math.floor(item.start || item.offset || 0),
-              },
-            }));
+            // Is screenshot wali API me agar "flat_text=true" hota hai to data normally ek transcript string return karta hai.
+            // Lekin agar wo array return karta hai toh hum usko map karenge.
+            if (Array.isArray(data)) {
+              docs = data.map((item: any) => ({
+                pageContent: item.text,
+                metadata: { 
+                  timestamp: Math.floor(item.start || item.offset || 0) 
+                }
+              }));
+            } else if (data && data.transcript) {
+              // In case it returns an object with a flat transcript string
+              docs = [{ pageContent: data.transcript, metadata: { timestamp: 0 } }];
+            } else {
+              // Fallback
+               docs = [{ pageContent: JSON.stringify(data), metadata: { timestamp: 0 } }];
+            }
 
             if (docs.length === 0) {
               throw new Error("RapidAPI returned an empty transcript.");
             }
 
-            console.log(
-              `✅ Extracted ${docs.length} chunks successfully via RapidAPI!`,
-            );
+            console.log(`✅ Extracted chunks successfully via RapidAPI!`);
+
           } catch (err: any) {
             console.error("RapidAPI Extractor Failed:", err);
             throw new Error(`REAL_YOUTUBE_ERROR: ${err.message}`);
