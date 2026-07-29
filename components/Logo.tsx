@@ -7,7 +7,6 @@ interface LogoProps {
 }
 
 export default function Logo({ showText = true, textSize = "16px" }: LogoProps) {
-  // Map exact pixel strings to Tailwind arbitrary text classes
   const sizeClass = {
     "12px": "text-[12px]",
     "16px": "text-[16px]",
@@ -16,9 +15,8 @@ export default function Logo({ showText = true, textSize = "16px" }: LogoProps) 
   }[textSize];
 
   return (
-    <div className="flex items-center gap-2 group cursor-pointer">
-      {/* Logo Container with subtle glow on hover */}
-      <div className="relative flex h-8 w-8 shrink-0 items-center justify-center transition-all duration-300 group-hover:drop-shadow-[0_0_10px_rgba(249,115,22,0.5)]">
+    <div className="flex items-center gap-2.5 group cursor-pointer">
+      <div className="relative flex h-7 w-7 shrink-0 items-center justify-center transition-transform duration-300 group-hover:scale-105">
         <svg
           viewBox="0 0 24 24"
           fill="none"
@@ -35,20 +33,16 @@ export default function Logo({ showText = true, textSize = "16px" }: LogoProps) 
           />
           <path
             d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"
-            className="text-orange-500 transition-transform duration-300 ease-out group-hover:translate-x-[1px]"
+            className="text-[#c25e1a] transition-transform duration-300 ease-out group-hover:translate-x-[1px]"
           />
         </svg>
       </div>
 
-      {/* Brand Text */}
       {showText && (
-        <div className="flex items-center">
-          <span className={cn("font-sans font-black tracking-tight text-txt uppercase", sizeClass)}>
-            ChaiBook
-          </span>
-          <span className={cn("font-sans font-black tracking-tight text-orange-500 uppercase ml-[1px]", sizeClass)}>
-            LM
-          </span>
+        <div className="flex items-center tracking-tight font-bold">
+          <span className={cn("text-txt", sizeClass)}>ChaiBook</span>
+          {/* Only 'LM' gets the primary color for a tasteful pop */}
+          <span className={cn("text-primary ml-[1px]", sizeClass)}>LM</span>
         </div>
       )}
     </div>

@@ -1,4 +1,3 @@
-// /app/layout.tsx
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
@@ -20,11 +19,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body suppressHydrationWarning className={`${inter.className} flex flex-col h-screen w-full`}>
+      <body suppressHydrationWarning className={`${inter.className} flex flex-col min-h-screen w-full bg-base`}>
         <ClerkProvider>
           <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
             <Navbar />
-            <main className="w-full flex flex-col flex-1 relative z-0 overflow-hidden">
+            <main className="w-full flex flex-col flex-1 relative z-0">
               {children}
             </main>
           </ThemeProvider>

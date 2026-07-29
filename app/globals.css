@@ -7,50 +7,99 @@
   --color-subtle: var(--border-subtle);
   --color-txt: var(--text-main);
   --color-muted: var(--text-muted);
+
+  /* Tasteful Primary Accent */
+  --color-primary: var(--accent-primary);
+  --color-primary-hover: var(--accent-primary-hover);
 }
 
 @layer base {
   :root {
-    --bg-base: #f9f8f6; 
-    --bg-panel: #ffffff; 
-    --bg-input: #f2f0ec; 
-    --border-subtle: rgba(28, 25, 23, 0.08); 
-    --text-main: #292524; 
-    --text-muted: #78716c; 
+    /* ☀️ Light Mode: Cozy Oatmeal & Latte (Warm, soft, no screen glare) */
+    --bg-base: #f9f6f0; /* Soft oatmeal/cream base */
+    --bg-panel: #ffffff; /* Crisp paper white for cards */
+    --bg-input: #efebe3; /* Warm almond/latte for inputs */
+    --border-subtle: rgba(135, 124, 116, 0.15); /* Soft earthy brown border */
+    --text-main: #382f2d; /* Dark roast espresso (much softer than black) */
+    --text-muted: #877c74; /* Dusty cocoa */
+
+    /* Authentic Spiced Chai / Cinnamon Tone */
+    --accent-primary: #c25e1a;
+    --accent-primary-hover: #a34c12;
   }
 
   .dark {
-    --bg-base: #0c0c0c;
-    --bg-panel: #141414;
-    --bg-input: #1a1a1a;
-    --border-subtle: rgba(255, 255, 255, 0.08);
-    --text-main: #f5f5f4;
-    --text-muted: #a8a29e;
+    /* 🌙 Dark Mode: Black Tea & Dark Cocoa */
+    --bg-base: #12100e;
+    --bg-panel: #181614;
+    --bg-input: #211e1c;
+    --border-subtle: rgba(239, 235, 230, 0.08);
+    --text-main: #efebe6; /* Steamed milk white */
+    --text-muted: #9e948b;
+
+    /* Golden Amber / Cardamom Glow */
+    --accent-primary: #de7e28;
+    --accent-primary-hover: #f09441;
   }
 
   body {
     background-color: var(--color-base);
     color: var(--color-txt);
-    /* Soft neutral selection */
-    @apply antialiased transition-colors duration-500 selection:bg-txt/10 selection:text-txt;
+    @apply antialiased transition-colors duration-500 selection:bg-primary/15 selection:text-primary;
   }
 }
 
-/* Minimalist Scrollbar */
-* { scrollbar-width: thin; scrollbar-color: var(--color-subtle) transparent; }
-*::-webkit-scrollbar { width: 4px; }
-*::-webkit-scrollbar-track { background: transparent; }
-*::-webkit-scrollbar-thumb { background-color: var(--color-subtle); border-radius: 10px; }
+/* Minimal Scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-subtle) transparent;
+}
+*::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--color-subtle);
+  border-radius: 4px;
+}
 
 ::view-transition-old(root),
-::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
-button { cursor: pointer; }
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+button {
+  cursor: pointer;
+}
 
 /* Clerk Overrides */
-.cl-rootBox { padding: 0; }
-.cl-cardBox { padding: 0; border: none; box-shadow: none; }
-.cl-card { background: none; padding: 0; }
-.cl-header, .cl-internal-1f4p2mz, .cl-footer { display: none; }
-.cl-internal-11tkpc3 { padding: 8px; }
-.cl-internal-wcdzh5 { width: 70%; margin: 1px auto; }
-.cl-internal-wcdzh5[data-variant="outline"] { box-shadow: 0px 0px 0px; }
+.cl-rootBox {
+  padding: 0;
+}
+.cl-cardBox {
+  padding: 0;
+  border: none;
+  box-shadow: none;
+}
+.cl-card {
+  background: none;
+  padding: 0;
+}
+.cl-header,
+.cl-internal-1f4p2mz,
+.cl-footer {
+  display: none;
+}
+.cl-internal-11tkpc3 {
+  padding: 8px;
+}
+.cl-internal-wcdzh5 {
+  width: 70%;
+  margin: 1px auto;
+}
+.cl-internal-wcdzh5[data-variant="outline"] {
+  box-shadow: 0px 0px 0px;
+}
