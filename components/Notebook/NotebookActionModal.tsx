@@ -103,7 +103,7 @@ export default function NotebookActionModal({ isOpen, type, notebook, onClose, o
                             }`}
                             disabled={type === "rename" && (!newTitle.trim() || newTitle.trim() === notebook.title)}
                         >
-                            {type === "rename" ? "Save Changes" : "Confirm Purge"}
+                            {type === "rename" ? "Save Changes" : "Confirm Delete"}
                         </button>
                     </div>
                 </form>
