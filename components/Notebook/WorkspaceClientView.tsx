@@ -49,6 +49,28 @@ const formatTimestamp = (seconds: number | string) => {
   return `${m}:${s}`;
 };
 
+// 🔥 SMART YOUTUBE URL PARSER
+const getYouTubeEmbedUrl = (url?: string, timestamp?: number) => {
+  if (!url) return '';
+  let videoId = '';
+  try {
+    const urlObj = new URL(url);
+    if (urlObj.hostname === 'youtu.be') {
+      videoId = urlObj.pathname.slice(1);
+    } else if (urlObj.hostname.includes('youtube.com')) {
+      if (urlObj.pathname.startsWith('/embed/')) {
+        videoId = urlObj.pathname.split('/')[2];
+      } else {
+        videoId = urlObj.searchParams.get('v') || '';
+      }
+    }
+  } catch (e) {
+    return url;
+  }
+  if (!videoId) return url;
+  return `https://www.youtube.com/embed/${videoId}${timestamp ? `?start=${timestamp}&autoplay=1` : ''}`;
+};
+
 type PreviewData = { title: string; type: string; contentUrl?: string; snippet?: string; pageNumber?: number; timestamp?: number; } | null;
 type Message = { id: string; role: "user" | "assistant"; content: string; };
 
@@ -502,7 +524,8 @@ const RightSidebar = ({ activePreview, setActivePreview, rightOpen, setRightOpen
                     <span className="text-[10px] font-bold uppercase tracking-widest text-muted truncate">{activePreview.title}</span>
                     <a href={activePreview.contentUrl} target="_blank" rel="noreferrer" className="text-muted hover:text-txt"><ExternalLink className="h-3.5 w-3.5" /></a>
                   </div>
-                  <div className="w-full bg-black flex-1 flex flex-col justify-center min-h-0"><iframe className="w-full aspect-video" src={`${activePreview.contentUrl?.replace("watch?v=", "embed/")}${activePreview.timestamp ? `?start=${activePreview.timestamp}&autoplay=1` : ""}`} allowFullScreen /></div>
+                  {/* 🔥 FIXED YOUTUBE IFRAME WITH HELPER */}
+                  <div className="w-full bg-black flex-1 flex flex-col justify-center min-h-0"><iframe className="w-full aspect-video" src={getYouTubeEmbedUrl(activePreview.contentUrl, activePreview.timestamp)} allowFullScreen /></div>
                 </div>
               ) : activePreview.type === "PDF" ? (
                 <div className="flex-1 flex flex-col min-h-0 rounded-2xl border border-subtle overflow-hidden bg-black/5 shadow-sm">
@@ -619,7 +642,7 @@ const RightSidebar = ({ activePreview, setActivePreview, rightOpen, setRightOpen
                       <div className="flex-1 flex flex-col min-h-0 p-5 gap-5">
 
                         {/* PREMIUM SPOTIFY-STYLE PLAYER (Pinned at top) */}
-                        <div className="shrink-0 bg-panel border border-subtle/80 rounded-[24px] px-6 py-4 shadow-xl relative overflow-hidden mb-2">
+                        <div className="shrink-0 bg-panel border border-subtle/80 rounded-[24px] p-6 shadow-xl relative overflow-hidden mb-2">
                           {/* Cinematic Ambient Blurs */}
                           <div className="absolute -top-24 -right-24 w-56 h-56 bg-primary/20 blur-[80px] rounded-full pointer-events-none" />
                           <div className="absolute -bottom-24 -left-24 w-56 h-56 bg-primary/10 blur-[80px] rounded-full pointer-events-none" />
@@ -628,13 +651,13 @@ const RightSidebar = ({ activePreview, setActivePreview, rightOpen, setRightOpen
 
                           {/* Cover Art & Title */}
                           <div className="flex items-center gap-5 relative z-10 mb-8">
-                            <div className="h-12 w-12 shrink-0 bg-gradient-to-br from-primary to-primary/60 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-primary/20 ring-1 ring-white/10 dark:ring-white/5">
-                              <Headphones className="h-4 w-4 opacity-100 drop-shadow-md" />
+                            <div className="h-20 w-20 shrink-0 bg-gradient-to-br from-primary to-primary/60 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-primary/20 ring-1 ring-white/10 dark:ring-white/5">
+                              <Headphones className="h-8 w-8 opacity-100 drop-shadow-md" />
                             </div>
                             <div className="flex flex-col min-w-0">
                               <span className="text-[10px] font-black tracking-widest text-primary uppercase mb-1.5 drop-shadow-sm">ChaiBook Original</span>
-                              <h2 className="text-sm md:text-sm font-bold truncate leading-snug text-txt">{activePreview.title}</h2>
-                              <span className="text-[10px] font-medium text-muted mt-1">Generated with Nova AI</span>
+                              <h2 className="text-[16px] md:text-[18px] font-bold truncate leading-snug text-txt">{activePreview.title}</h2>
+                              <span className="text-[12px] font-medium text-muted mt-1">Generated with Nova AI</span>
                             </div>
                           </div>
 
@@ -648,23 +671,23 @@ const RightSidebar = ({ activePreview, setActivePreview, rightOpen, setRightOpen
                           </div>
 
                           {/* Controls */}
-                          <div className="relative z-10 flex justify-center items-center gap-10 mt-3">
-                            <SkipBack onClick={() => { if (audioRef.current) { audioRef.current.currentTime -= 10; handleTimeUpdate(); } }} className="w-4 h-4 text-muted hover:text-primary cursor-pointer transition-colors" />
+                          <div className="relative z-10 flex justify-center items-center gap-10 mt-6">
+                            <SkipBack onClick={() => { if (audioRef.current) { audioRef.current.currentTime -= 10; handleTimeUpdate(); } }} className="w-5 h-5 text-muted hover:text-primary cursor-pointer transition-colors" />
 
-                            <button onClick={togglePlay} className="h-10 w-10 bg-txt text-base rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl shadow-black/10 dark:shadow-black/40 hover:bg-primary hover:text-white group">
+                            <button onClick={togglePlay} className="h-14 w-14 bg-txt text-base rounded-full flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl shadow-black/10 dark:shadow-black/40 hover:bg-primary hover:text-white group">
                               {isPlaying
-                                ? <Pause className="w-4 h-4 fill-current" />
-                                : <Play className="w-4 h-4 fill-current translate-x-0.5" />
+                                ? <Pause className="w-6 h-6 fill-current" />
+                                : <Play className="w-6 h-6 fill-current translate-x-0.5" />
                               }
                             </button>
 
-                            <SkipForward onClick={() => { if (audioRef.current) { audioRef.current.currentTime += 10; handleTimeUpdate(); } }} className="w-4 h-4 text-muted hover:text-primary cursor-pointer transition-colors" />
+                            <SkipForward onClick={() => { if (audioRef.current) { audioRef.current.currentTime += 10; handleTimeUpdate(); } }} className="w-5 h-5 text-muted hover:text-primary cursor-pointer transition-colors" />
                           </div>
                         </div>
 
                         {/* SEPARATE SCROLLING TRANSCRIPT BOX */}
-                        <div className="flex-1 min-h-0 bg-panel border border-subtle/60 rounded-[20px] px-5 py-7 overflow-y-auto custom-thin-scrollbar shadow-sm" ref={transcriptContainerRef}>
-                          <div className="flex flex-col gap-4">
+                        <div className="flex-1 min-h-0 bg-panel border border-subtle/60 rounded-[20px] p-5 overflow-y-auto custom-thin-scrollbar shadow-sm" ref={transcriptContainerRef}>
+                          <div className="flex flex-col gap-6">
                             {transcriptSentences.map((item: any, i: number) => {
                               const isActive = i === activeSentenceIndex;
                               const isPast = i < activeSentenceIndex;
@@ -672,7 +695,7 @@ const RightSidebar = ({ activePreview, setActivePreview, rightOpen, setRightOpen
                               return (
                                 <div key={i} className="transcript-line flex flex-col relative pl-4 border-l-2 transition-all" onClick={() => { if (audioRef.current && transcriptSentences.length > 0) { audioRef.current.currentTime = (i / transcriptSentences.length) * duration; } }} style={{ borderColor: isActive ? 'var(--color-primary)' : 'transparent' }}>
                                   {showSpeaker && (<span className={`text-[10px] font-black uppercase tracking-widest mb-1.5 transition-colors duration-500 ${isActive || isPast ? 'text-primary' : 'text-muted'}`}>{item.speaker}</span>)}
-                                  <p className={`text-[12px] sm:text-[13px] font-medium leading-relaxed transition-all duration-500 ease-out cursor-pointer ${isActive ? 'text-txt opacity-100' : isPast ? 'text-muted opacity-60' : 'text-muted opacity-30'}`}>{item.text}.</p>
+                                  <p className={`text-[14px] sm:text-[15px] font-medium leading-relaxed transition-all duration-500 ease-out cursor-pointer ${isActive ? 'text-txt opacity-100' : isPast ? 'text-muted opacity-60' : 'text-muted opacity-30'}`}>{item.text}.</p>
                                 </div>
                               );
                             })}
