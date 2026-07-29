@@ -28,7 +28,7 @@ export default function Home() {
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] pointer-events-none -z-20"></div>
         <div className="absolute left-1/2 top-0 -z-10 h-[30rem] w-[40rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-orange-500/10 blur-[100px] pointer-events-none"></div>
 
-        <div className="mx-auto flex w-full max-w-5xl flex-col items-center justify-center px-6 py-20 text-center lg:py-28">
+        <div className="mx-auto flex w-full max-w-5xl flex-col items-center justify-center px-6 py-20 text-center">
 
           <motion.div
             variants={containerVariants}
@@ -57,7 +57,7 @@ export default function Home() {
                 href="/notebook"
                 className="group flex h-11 items-center gap-2 rounded-xl bg-txt px-6 text-[14px] font-bold text-base transition-all hover:scale-105 shadow-[0_0_20px_rgba(249,115,22,0.2)]"
               >
-                Go to Workspace
+                View Notebooks
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
               </Link>
               <a

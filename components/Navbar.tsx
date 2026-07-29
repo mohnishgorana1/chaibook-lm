@@ -35,7 +35,7 @@ export default function Navbar() {
               href="/notebook"
               className="flex items-center gap-2 text-[13px] font-medium text-muted hover:text-txt transition-colors"
             >
-              See Notebooks <ArrowRight className="h-4 w-4" />
+              View Notebooks <ArrowRight className="h-4 w-4" />
             </Link>
             <UserButton
               appearance={{
