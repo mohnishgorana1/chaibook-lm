@@ -18,6 +18,8 @@ import { QdrantClient } from "@qdrant/js-client-rest";
 import { optimizeQuery, generateHyDE } from "@/lib/rag/query-utils";
 import Notebook from "@/models/notebook.model";
 
+
+import { extractText } from "unpdf";
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export const processSourceDocument = inngest.createFunction(
@@ -157,14 +159,27 @@ export const processSourceDocument = inngest.createFunction(
             metadata: {},
           }));
         } else if (type === "PDF") {
+          // const response = await fetch(fileUrl);
+          // const blob = await response.blob();
+          // const loader = new WebPDFLoader(blob);
+          // const loadedDocs = await loader.load();
+          // docs = loadedDocs.map((d) => ({
+          //   pageContent: d.pageContent,
+          //   metadata: d.metadata,
+          // }));
+
           const response = await fetch(fileUrl);
-          const blob = await response.blob();
-          const loader = new WebPDFLoader(blob);
-          const loadedDocs = await loader.load();
-          docs = loadedDocs.map((d) => ({
-            pageContent: d.pageContent,
-            metadata: d.metadata,
-          }));
+          const arrayBuffer = await response.arrayBuffer();
+
+          // Serverless-safe PDF extraction bypassing Langchain's native errors
+          const { text } = await extractText(new Uint8Array(arrayBuffer));
+
+          docs = [
+            {
+              pageContent: text,
+              metadata: { source: fileUrl },
+            },
+          ];
         } else if (type === "TEXT" || type === "TRANSCRIPT") {
           const response = await fetch(fileUrl);
           const text = await response.text();
@@ -238,7 +253,6 @@ export const processSourceDocument = inngest.createFunction(
     return { success: true, sourceId };
   },
 );
-
 
 export const generatePodcastBackgroundFunc = inngest.createFunction(
   {
@@ -361,7 +375,7 @@ export const generatePodcastBackgroundFunc = inngest.createFunction(
       return JSON.parse(cleanJson);
     });
 
-   // ==========================================
+    // ==========================================
     // Phase 3: TTS Conversion & Supabase Upload (Optimized with Batching)
     // ==========================================
     await step.run("synthesize-and-save", async () => {
@@ -403,20 +417,23 @@ export const generatePodcastBackgroundFunc = inngest.createFunction(
       const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
       if (!supabaseUrl || !supabaseKey) {
-          throw new Error("Supabase environment variables are missing.");
+        throw new Error("Supabase environment variables are missing.");
       }
 
-      const uploadRes = await fetch(`${supabaseUrl}/storage/v1/object/chaibook-podcasts/${fileName}`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${supabaseKey}`,
-          "apikey": supabaseKey,
-          "Content-Type": "audio/mpeg",
+      const uploadRes = await fetch(
+        `${supabaseUrl}/storage/v1/object/chaibook-podcasts/${fileName}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${supabaseKey}`,
+            apikey: supabaseKey,
+            "Content-Type": "audio/mpeg",
+          },
+          body: blob as any,
+          // @ts-ignore
+          duplex: "half",
         },
-        body: blob as any,
-        // @ts-ignore
-        duplex: "half", 
-      });
+      );
 
       if (!uploadRes.ok) {
         const errText = await uploadRes.text();
