@@ -139,8 +139,8 @@ export default function Home() {
                 </div>
                 <div className="p-4 w-full max-w-xl mx-auto">
                   <div className="h-10 w-full bg-panel border border-subtle rounded-xl flex items-center px-2 gap-2 shadow-xs">
-                    <div className="h-6 w-16 rounded-md bg-input text-[10px] font-medium flex items-center justify-center text-muted">Nodes</div>
-                    <div className="h-6 w-16 rounded-md bg-input text-[10px] font-medium flex items-center justify-center text-muted gap-1"><Headphones size={10}/> Stream</div>
+                    <div className="h-6 w-16 rounded-md bg-input text-[10px] font-medium flex items-center justify-center text-muted">Roadmap</div>
+                    <div className="h-6 w-16 rounded-md bg-input text-[10px] font-medium flex items-center justify-center text-muted gap-1"><Headphones size={10}/> Podcast</div>
                     <div className="h-1.5 w-24 rounded bg-txt/5 ml-2"></div>
                     <div className="h-6 w-6 rounded-md bg-txt ml-auto flex items-center justify-center shadow-xs"><ArrowUp size={12} className="text-panel"/></div>
                   </div>
@@ -150,7 +150,7 @@ export default function Home() {
               {/* Right Panel */}
               <div className="flex flex-col w-[280px] border-l border-subtle/60 bg-panel/10 p-4">
                 <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-muted mb-4">
-                  <Headphones size={12} className="text-primary"/> Acoustic Engine
+                  <Headphones size={12} className="text-primary"/> Podcasts
                 </div>
                 <div className="bg-panel border border-subtle/80 rounded-2xl p-4 shadow-sm relative overflow-hidden mb-5">
                   <div className="flex gap-3 items-center mb-4">
